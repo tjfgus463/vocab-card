@@ -635,22 +635,102 @@ var FREQ = {};
 var QP = [];
 var studyDays = new Set();
 
+// ── Persistence: save/load state ──
+function saveState() {
+  try {
+    localStorage.setItem('jp_freq', JSON.stringify(FREQ));
+    localStorage.setItem('jp_qp', JSON.stringify(QP));
+    localStorage.setItem('jp_wrong', JSON.stringify(wrongNotes));
+    localStorage.setItem('jp_qstats', JSON.stringify({total:quizTotal,correct:quizCorrect,history:quizHistory.slice(-50)}));
+    localStorage.setItem('jp_days', JSON.stringify(Array.from(studyDays)));
+  } catch(e) {}
+}
+function loadState() {
+  try {
+    var freq = localStorage.getItem('jp_freq');
+    if (freq) { var f = JSON.parse(freq); Object.keys(f).forEach(function(k){ FREQ[k]=f[k]; }); }
+    var qp = localStorage.getItem('jp_qp');
+    if (qp) { var q = JSON.parse(qp); q.forEach(function(item){ if(!QP.find(function(x){return x.jp===item.jp;})) QP.push(item); }); }
+    var wr = localStorage.getItem('jp_wrong');
+    if (wr) { var w = JSON.parse(wr); w.forEach(function(item){ wrongNotes.push(item); }); }
+    var qs = localStorage.getItem('jp_qstats');
+    if (qs) { var s = JSON.parse(qs); quizTotal=s.total||0; quizCorrect=s.correct||0; quizHistory=s.history||[]; }
+    var dy = localStorage.getItem('jp_days');
+    if (dy) { JSON.parse(dy).forEach(function(d){ studyDays.add(d); }); }
+  } catch(e) {}
+}
+
+// ── Keyword extraction: only register meaningful single words ──
+// Rules: 2~5 chars, Japanese chars only, not stop-words, not full sentences
+var STOP_WORDS = new Set([
+  'です','ます','ません','でした','ました','ている','てい','ので','から','けど',
+  'けれど','しかし','でも','そして','また','あと','もう','まだ','もっと',
+  'とても','少し','ちょっと','すごく','なんか','やっぱ','やはり','いつも',
+  'ちゃんと','きっと','たぶん','もしか','なぜ','どうして','どこ','いつ','だれ',
+  'これ','それ','あれ','この','その','あの','ここ','そこ','あそこ','こんな',
+  'そんな','あんな','こう','そう','ああ','いい','ない','ある','いる','する',
+  'なる','くる','いく','いう','くれ','もら','あげ','くだ','ほし','たい'
+]);
+
+function isGoodKeyword(w) {
+  if (!w || w.length < 2 || w.length > 5) return false;
+  // Must contain kanji or be meaningful kana word
+  var hasKanji = /[一-鿿]/.test(w);
+  var allKana = /^[぀-ヿ]+$/.test(w);
+  if (!hasKanji && !allKana) return false;
+  if (STOP_WORDS.has(w)) return false;
+  // Skip if it looks like a conjugation fragment (ends in te-form etc.)
+  if (allKana && w.length === 2 && /[てでにをはがもとでやか]$/.test(w)) return false;
+  return true;
+}
+
+function extractKeywords(text) {
+  // Extract 2-5 char Japanese word chunks - prioritize kanji compounds
+  var words = [];
+  // Kanji compounds: 2-4 kanji in a row
+  var kanjiChunks = text.match(/[一-鿿]{2,4}/g) || [];
+  kanjiChunks.forEach(function(w){ if(isGoodKeyword(w)) words.push(w); });
+  // Single kanji that are important vocab
+  var singleKanji = text.match(/[一-鿿]/g) || [];
+  singleKanji.forEach(function(w){ if(isGoodKeyword(w) && !words.includes(w)) words.push(w); });
+  // Kana words 3+ chars (nouns/verbs)
+  var kanaWords = text.match(/[぀-ヿ]{3,5}/g) || [];
+  kanaWords.forEach(function(w){ if(isGoodKeyword(w) && !words.includes(w)) words.push(w); });
+  return words.slice(0, 6); // max 6 keywords per sentence
+}
+
 function trackF(jp, ko) {
   if (!jp || jp.trim().length < 2) return;
   var k = jp.trim();
+  // Block: full sentences (contains 。！？ or too long)
+  if (k.length > 12 || /[。！？、]/.test(k)) return;
+  // Block: stop words
+  if (STOP_WORDS.has(k)) return;
+  // Block: pure kana under 3 chars (likely particles/fragments)
+  if (/^[぀-ヿ]+$/.test(k) && k.length < 3) return;
   if (FREQ[k]) { FREQ[k].count++; if (ko) FREQ[k].ko = ko; }
   else { FREQ[k] = {jp:k, ko:ko||'', count:1, inQ:false, jlpt:classifyJLPT(k)}; }
-  if (FREQ[k].count >= 5 && !FREQ[k].inQ) { FREQ[k].inQ = true; addQ(k, FREQ[k].ko, '빈도 자동 (5회+)'); }
+  if (FREQ[k].count >= 3 && !FREQ[k].inQ && FREQ[k].ko) {
+    FREQ[k].inQ = true; addQ(k, FREQ[k].ko, '빈도 자동 (3회+)');
+  }
   studyDays.add(new Date().toISOString().slice(0,10));
+  saveState();
+}
+function trackSentenceKeywords(sentence, translationHint) {
+  var keywords = extractKeywords(sentence);
+  keywords.forEach(function(w){ trackF(w, ''); });
 }
 function addQ(jp, ko, src) {
+  if (!ko || ko.trim().length < 1) return; // never add without translation
   if (QP.find(function(q){ return q.jp === jp; })) return;
   QP.push({jp:jp, ko:ko, src:src});
+  saveState();
 }
 function manQ(jp, ko) {
   if (FREQ[jp]) FREQ[jp].inQ = true;
   addQ(jp, ko||'', '수동 추가');
   renderFreq(); renderQuiz();
+  saveState();
 }
 
 // ── Chat ──
@@ -681,9 +761,9 @@ async function sendChat() {
     addMsg('ai', r.jp, r.ko ? '💡 ' + r.ko : '', r._l);
     chatH.push({role:'assistant', content:r.raw||r.jp});
     var ko = r.ko ? r.ko.split('/')[0].replace('한국어: ','').trim() : '';
-    trackF(text, ko);
-    var ws = r.jp.match(/[\u3040-\u30ff\u4e00-\u9fff]{2,}/g) || [];
-    ws.forEach(function(w){ trackF(w,''); });
+    // Extract keywords from both user input and AI response - not full sentences
+    trackSentenceKeywords(text, ko);
+    trackSentenceKeywords(r.jp, '');
   } catch(e) {
     rmLd();
     addMsg('ai', 'エラーが発生しました。', '오류: ' + e.message, null);
@@ -750,8 +830,8 @@ async function analyzeTexts(sents, badgeCls, label) {
       if(ke) ke.textContent = ko||'-';
       var c = r._l !== 'API'; if(c) cached++;
       if(se) { se.textContent = c?'캐시':'번역'; se.className='sst '+(c?'sc':'sd'); }
-      trackF(s, ko);
-      (s.match(/[\u3040-\u30ff\u4e00-\u9fff]{2,}/g)||[]).forEach(function(w){ trackF(w,''); });
+      // Extract keywords only - not the full sentence
+      trackSentenceKeywords(s, ko);
     } catch(e) {
       if(ke) ke.textContent='-';
       if(se) { se.textContent='오류'; se.className='sst sw'; }
@@ -822,19 +902,31 @@ function renderFreq() {
 // ── Quiz ──
 var qIdx=0, qAns=false, quizTotal=0, quizCorrect=0, quizHistory=[], wrongNotes=[];
 
+function getQuizableItems() {
+  return QP.filter(function(q){ return q.ko && q.ko.trim().length > 0; });
+}
 function renderQuiz() {
   var c=document.getElementById('quiz-content');
-  if(QP.length===0){ c.innerHTML='<div class="empty"><div class="empty-icon">🎯</div>퀴즈가 아직 없어요.<br>단어장에서 추가하거나 5회 이상 대화해보세요!</div>'; return; }
-  if(qIdx>=QP.length) qIdx=0;
+  var pool=getQuizableItems();
+  if(pool.length===0){ c.innerHTML='<div class="empty"><div class="empty-icon">🎯</div>퀴즈가 아직 없어요.<br>단어장에서 추가하거나 3회 이상 대화해보세요!</div>'; return; }
+  if(qIdx>=pool.length) qIdx=0;
   qAns=false;
-  var q=QP[qIdx];
-  var pool=Object.values(FREQ).map(function(x){ return x.ko; }).filter(function(k){ return k && k!==q.ko; }).sort(function(){ return Math.random()-.5; }).slice(0,3);
-  var opts=[q.ko].concat(pool).filter(Boolean);
-  while(opts.length<4) opts.push('모르겠음');
-  opts=opts.sort(function(){ return Math.random()-.5; });
+  var q=pool[qIdx];
+  var wrongPool=Object.values(FREQ)
+    .filter(function(x){ return x.ko && x.ko.trim().length>0 && x.ko!==q.ko && x.jp!==q.jp; })
+    .sort(function(){ return Math.random()-.5; })
+    .slice(0,3)
+    .map(function(x){ return x.ko; });
+  if(wrongPool.length < 2) {
+    qIdx++;
+    if(qIdx>=pool.length) qIdx=0;
+    if(pool.length<=1){ c.innerHTML='<div class="empty"><div class="empty-icon">📖</div>단어장에 단어가 더 필요해요.<br>대화를 더 해보면 퀴즈 문제가 늘어나요!</div>'; return; }
+    renderQuiz(); return;
+  }
+  var opts=[q.ko].concat(wrongPool).sort(function(){ return Math.random()-.5; });
   var acc=quizTotal>0?Math.round((quizCorrect/quizTotal)*100):0;
   c.innerHTML='<div class="qscore-bar"><span class="qs-label">오늘 풀이</span><span class="qs-nums">'+quizCorrect+'/'+quizTotal+' ('+acc+'%)</span></div>'+
-    '<div style="font-size:12px;color:var(--muted);margin-bottom:.75rem;">'+(qIdx+1)+' / '+QP.length+'문제</div>'+
+    '<div style="font-size:12px;color:var(--muted);margin-bottom:.75rem;">'+(qIdx+1)+' / '+pool.length+'문제</div>'+
     '<div class="qcard">'+
       '<div class="qqsrc">'+q.src+'</div>'+
       '<div class="qqq">'+q.jp+'</div>'+
@@ -861,8 +953,9 @@ function chkQ(btn, ch, cr, jp) {
     else wrongNotes.push({jp:jp,ko:cr,myAnswer:ch,count:1,src:QP[qIdx]?QP[qIdx].src:'',timestamp:Date.now()});
   }
   document.getElementById('nqb').style.display='block';
+  saveState();
 }
-function nextQ() { qIdx++; renderQuiz(); }
+function nextQ() { qIdx++; saveState(); renderQuiz(); }
 
 // ── Stats ──
 var chartInst=null;
@@ -919,11 +1012,11 @@ function deleteWrong(i) {
   var item=sorted[i];
   var idx=wrongNotes.findIndex(function(n){ return n.jp===item.jp; });
   if(idx>=0) wrongNotes.splice(idx,1);
-  renderWrong();
+  renderWrong(); saveState();
 }
 function addWrongToQuiz(jp,ko) {
   if(!QP.find(function(q){ return q.jp===jp; })) QP.push({jp:jp,ko:ko,src:'오답 재도전'});
-  renderQuiz();
+  renderQuiz(); saveState();
 }
 
 // ── Settings modal ──
@@ -998,6 +1091,8 @@ function showSec(id, btn) {
 }
 
 // ── Init ──
+// Load persisted state first
+loadState();
 var pre=[
   {jp:'おはようございます',ko:'안녕하세요 (아침)',raw:'おはようございます\n💡 한국어: 안녕하세요 (아침) / 설명: 아침 인사말'},
   {jp:'ありがとうございます',ko:'감사합니다',raw:'ありがとうございます\n💡 한국어: 감사합니다 / 설명: 공손한 감사'},
