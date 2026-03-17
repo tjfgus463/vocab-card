@@ -4,6 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>일본어 학습 앱</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#534AB7">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="日本語">
+<link rel="apple-touch-icon" href="icon-192.png">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500&family=Noto+Sans+KR:wght@400;500&display=swap');
@@ -218,6 +224,11 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
       </div>
       <div class="hdr-right">
         <div class="saved-box"><span class="saved-num" id="sc">0</span>API 절약</div>
+        
+      <button id="install-btn" onclick="" title="홈 화면에 추가"
+        style="display:none;align-items:center;gap:5px;padding:6px 12px;background:var(--purple);color:#fff;border:none;border-radius:20px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;">
+        &#8615; 앱 설치
+      </button>
         <button class="settings-btn" onclick="openSettings()" title="설정">⚙</button>
       </div>
     </div>
@@ -1006,6 +1017,45 @@ if (CFG.apiKey) {
 } else {
   addMsg('ai','⚙ 설정이 필요해요','💡 오른쪽 상단 ⚙ 버튼을 눌러 Gemini API 키를 입력해주세요.',null);
 }
+</script>
+
+<script>
+// ── PWA: Service Worker 등록 ──
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function() {
+    navigator.serviceWorker.register('./service-worker.js')
+      .then(function(reg) { console.log('[PWA] SW 등록 성공:', reg.scope); })
+      .catch(function(err) { console.log('[PWA] SW 등록 실패:', err); });
+  });
+}
+
+// ── PWA: 설치 배너 ──
+var deferredPrompt = null;
+var installBtn = document.getElementById('install-btn');
+
+window.addEventListener('beforeinstallprompt', function(e) {
+  e.preventDefault();
+  deferredPrompt = e;
+  if (installBtn) {
+    installBtn.style.display = 'flex';
+    installBtn.addEventListener('click', function() {
+      installBtn.style.display = 'none';
+      deferredPrompt.prompt();
+      deferredPrompt.userChoice.then(function(choice) {
+        if (choice.outcome === 'accepted') {
+          console.log('[PWA] 설치 수락');
+        }
+        deferredPrompt = null;
+      });
+    });
+  }
+});
+
+window.addEventListener('appinstalled', function() {
+  if (installBtn) installBtn.style.display = 'none';
+  deferredPrompt = null;
+  console.log('[PWA] 설치 완료');
+});
 </script>
 </body>
 </html>
