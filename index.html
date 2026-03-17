@@ -1,0 +1,1011 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>일본어 학습 앱</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500&family=Noto+Sans+KR:wght@400;500&display=swap');
+:root {
+  --bg:#f7f6f2; --surface:#fff; --border:#e4e2da; --border2:#ccc9be;
+  --text:#1a1a18; --muted:#7a7870;
+  --purple:#534AB7; --pl:#EEEDFE; --pm:#AFA9EC;
+  --teal:#1D9E75; --tl:#E1F5EE;
+  --coral:#D85A30; --cl:#FAECE7;
+  --amber-l:#FEF9E7; --amber-b:#FAC775; --amber-t:#633806;
+  --green-l:#EAF3DE; --green:#3B6D11;
+  --red-l:#FCEBEB; --red:#A32D2D;
+  --blue-l:#E6F1FB; --blue:#0C447C;
+  --r-md:10px; --r-lg:16px;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
+.shell{max-width:520px;margin:0 auto;min-height:100vh;background:var(--surface);border-left:.5px solid var(--border);border-right:.5px solid var(--border);display:flex;flex-direction:column;}
+
+/* Header */
+.hdr{padding:1rem 1.25rem .75rem;border-bottom:.5px solid var(--border);background:var(--surface);position:sticky;top:0;z-index:10;}
+.hdr-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:.6rem;}
+.atitle{font-size:17px;font-weight:500;}
+.asub{font-size:11px;color:var(--muted);margin-top:1px;}
+.hdr-right{display:flex;align-items:center;gap:10px;}
+.saved-box{text-align:right;font-size:11px;color:var(--muted);}
+.saved-num{font-size:22px;font-weight:500;color:var(--teal);display:block;line-height:1;}
+.settings-btn{width:32px;height:32px;border-radius:50%;border:.5px solid var(--border2);background:var(--bg);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;transition:all .15s;}
+.settings-btn:hover{background:var(--pl);border-color:var(--pm);}
+
+/* Cache bar */
+.cbar{display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--bg);border-radius:var(--r-md);font-size:11px;color:var(--muted);margin-bottom:.6rem;}
+.cdot{width:7px;height:7px;border-radius:50%;transition:background .3s;flex-shrink:0;}
+.cdot.hit{background:var(--teal);}.cdot.miss{background:var(--coral);}.cdot.idle{background:var(--border2);}
+.cstats{margin-left:auto;display:flex;gap:10px;}
+
+/* Nav */
+.nav{display:flex;gap:4px;padding:0 1.25rem .75rem;overflow-x:auto;}
+.nav::-webkit-scrollbar{display:none;}
+.nb{flex:1;min-width:58px;padding:6px 3px;font-size:10.5px;border:.5px solid var(--border);background:var(--surface);border-radius:var(--r-md);cursor:pointer;color:var(--muted);line-height:1.45;text-align:center;transition:all .15s;font-family:inherit;}
+.nb.active{background:var(--pl);color:var(--purple);border-color:var(--pm);font-weight:500;}
+.nb:hover:not(.active){background:var(--bg);}
+
+/* Settings modal */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:100;display:none;align-items:flex-end;justify-content:center;}
+.modal-overlay.open{display:flex;}
+.modal{background:var(--surface);border-radius:var(--r-lg) var(--r-lg) 0 0;width:100%;max-width:520px;padding:1.25rem;max-height:85vh;overflow-y:auto;}
+.modal-handle{width:36px;height:4px;border-radius:2px;background:var(--border2);margin:0 auto 1rem;}
+.modal-title{font-size:15px;font-weight:500;margin-bottom:1rem;}
+.modal-close{float:right;font-size:20px;cursor:pointer;color:var(--muted);line-height:1;margin-top:-2px;}
+.field-label{font-size:12px;font-weight:500;color:var(--text);margin-bottom:5px;}
+.field-desc{font-size:11px;color:var(--muted);margin-bottom:8px;line-height:1.6;}
+.key-input-wrap{display:flex;gap:7px;align-items:center;margin-bottom:6px;}
+.key-input{flex:1;padding:9px 12px;border:.5px solid var(--border2);border-radius:var(--r-md);font-size:13px;background:var(--surface);color:var(--text);outline:none;font-family:inherit;letter-spacing:.05em;}
+.key-input:focus{border-color:var(--pm);}
+.save-btn{padding:9px 16px;background:var(--purple);color:#fff;border:none;border-radius:var(--r-md);font-size:13px;cursor:pointer;font-family:inherit;white-space:nowrap;}
+.save-btn:hover{background:#3C3489;}
+.key-status{font-size:11px;min-height:16px;margin-bottom:12px;}
+.key-status.ok{color:var(--teal);}.key-status.err{color:var(--red);}
+.key-saved-badge{display:inline-flex;align-items:center;gap:5px;background:var(--tl);color:#085041;font-size:11px;padding:4px 10px;border-radius:20px;font-weight:500;margin-bottom:12px;}
+.model-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px;}
+.mbtn{padding:9px 10px;font-size:11px;border:.5px solid var(--border);border-radius:var(--r-md);background:var(--bg);color:var(--muted);cursor:pointer;font-family:inherit;text-align:left;line-height:1.5;transition:all .15s;}
+.mbtn.active{background:var(--pl);color:var(--purple);border-color:var(--pm);font-weight:500;}
+.mbtn:hover:not(.active){background:var(--surface);}
+.mbtn-name{font-weight:500;display:block;margin-bottom:1px;}
+.mbtn-desc{font-size:10px;opacity:.7;}
+.warning-box{background:var(--amber-l);border:.5px solid var(--amber-b);border-radius:var(--r-md);padding:10px 12px;font-size:11px;color:var(--amber-t);line-height:1.7;}
+.divider{border:none;border-top:.5px solid var(--border);margin:1rem 0;}
+.token-row{display:flex;align-items:center;gap:10px;}
+.token-label{font-size:12px;color:var(--muted);flex:1;}
+.token-val{font-size:13px;font-weight:500;color:var(--purple);min-width:40px;text-align:right;}
+
+/* Main */
+.main{flex:1;padding:1rem 1.25rem;overflow-y:auto;}
+.sec{display:none;}.sec.active{display:block;}
+.stitle{font-size:14px;font-weight:500;margin-bottom:.75rem;}
+.sdesc{font-size:12px;color:var(--muted);margin-bottom:.75rem;line-height:1.6;}
+
+/* Chat */
+.chat-area{height:270px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;border:.5px solid var(--border);border-radius:var(--r-lg);padding:.75rem;background:var(--surface);margin-bottom:.75rem;}
+.chat-area::-webkit-scrollbar{width:3px;}.chat-area::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
+.msg{max-width:85%;padding:9px 13px;border-radius:16px;font-size:13px;line-height:1.55;}
+.msg.ai{background:var(--pl);color:#26215C;align-self:flex-start;border-bottom-left-radius:4px;}
+.msg.user{background:var(--tl);color:#04342C;align-self:flex-end;border-bottom-right-radius:4px;}
+.mjp{font-size:14px;font-weight:500;font-family:'Noto Sans JP',sans-serif;}
+.mko{font-size:11px;color:var(--muted);margin-top:2px;}
+.mbadge{display:inline-block;font-size:10px;padding:2px 6px;border-radius:8px;margin-top:3px;font-weight:500;}
+.bl1{background:var(--tl);color:#085041;}.bl2{background:var(--blue-l);color:var(--blue);}.bapi{background:var(--cl);color:#712B13;}
+.qph{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px;}
+.qpb{padding:4px 10px;font-size:11px;border:.5px solid var(--pm);border-radius:20px;background:var(--pl);color:var(--purple);cursor:pointer;font-family:'Noto Sans JP',sans-serif;transition:all .15s;}
+.qpb:hover{background:#CECBF6;}
+.cia{display:flex;gap:7px;}
+.ci{flex:1;padding:9px 13px;border:.5px solid var(--border2);border-radius:24px;font-size:13px;background:var(--surface);color:var(--text);outline:none;font-family:inherit;transition:border-color .15s;}
+.ci:focus{border-color:var(--pm);}
+.sbtn{padding:9px 16px;background:var(--purple);color:#fff;border:none;border-radius:24px;font-size:13px;cursor:pointer;font-family:inherit;transition:background .15s;}
+.sbtn:hover{background:#3C3489;}
+
+/* Import */
+.tab-row{display:flex;gap:6px;margin-bottom:.75rem;}
+.tp{padding:5px 14px;border-radius:20px;font-size:11px;cursor:pointer;border:.5px solid var(--border);background:var(--bg);color:var(--muted);transition:all .15s;font-family:inherit;}
+.tp.active{background:var(--pl);color:var(--purple);border-color:var(--pm);}
+.paste-area{width:100%;min-height:100px;padding:10px 12px;border:.5px solid var(--border2);border-radius:var(--r-md);font-size:13px;background:var(--surface);color:var(--text);resize:vertical;outline:none;font-family:'Noto Sans JP','Noto Sans KR',sans-serif;line-height:1.6;}
+.paste-area:focus{border-color:var(--pm);}
+.abtn{width:100%;margin-top:8px;padding:11px;background:var(--purple);color:#fff;border:none;border-radius:var(--r-md);font-size:13px;cursor:pointer;font-family:inherit;font-weight:500;transition:background .15s;}
+.abtn:hover:not(:disabled){background:#3C3489;}.abtn:disabled{opacity:.5;cursor:not-allowed;}
+.kakao-guide{background:var(--amber-l);border:.5px solid var(--amber-b);border-radius:var(--r-md);padding:10px 13px;font-size:11px;color:var(--amber-t);line-height:1.8;margin-bottom:10px;}
+.dropzone{border:1.5px dashed var(--border2);border-radius:var(--r-lg);padding:1.5rem;text-align:center;cursor:pointer;transition:all .15s;}
+.dropzone:hover,.dropzone.drag{border-color:var(--purple);background:#EEEDFE22;}
+.rcard{background:var(--surface);border:.5px solid var(--border);border-radius:var(--r-lg);padding:1rem;margin-top:1rem;}
+.rstats{display:flex;gap:8px;margin-bottom:10px;}
+.rs{flex:1;background:var(--bg);border-radius:var(--r-md);padding:8px 10px;}
+.rsn{font-size:20px;font-weight:500;color:var(--purple);}.rsl{font-size:11px;color:var(--muted);}
+.pw{height:4px;background:var(--bg);border-radius:2px;margin:8px 0;overflow:hidden;}
+.pf{height:100%;background:var(--purple);border-radius:2px;transition:width .3s;}
+.slist{display:flex;flex-direction:column;gap:5px;max-height:200px;overflow-y:auto;}
+.slist::-webkit-scrollbar{width:3px;}.slist::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
+.si{display:flex;align-items:flex-start;gap:8px;padding:8px 10px;border:.5px solid var(--border);border-radius:var(--r-md);font-size:12px;}
+.si-jp{flex:1;color:var(--text);line-height:1.5;font-family:'Noto Sans JP',sans-serif;}
+.si-ko{flex:1;color:var(--muted);font-size:11px;line-height:1.5;}
+.sst{font-size:10px;padding:2px 7px;border-radius:8px;flex-shrink:0;font-weight:500;}
+.sd{background:var(--tl);color:#085041;}.sc{background:var(--pl);color:#3C3489;}.sw{background:var(--bg);color:var(--muted);}
+.sbadge{display:inline-block;font-size:10px;padding:2px 8px;border-radius:8px;font-weight:500;margin-bottom:8px;}
+.skk{background:var(--amber-l);color:var(--amber-t);}.snews{background:var(--blue-l);color:var(--blue);}.spaste{background:var(--pl);color:#3C3489;}
+
+/* Freq */
+.jlpt-filter{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:.75rem;}
+.jf-btn{padding:4px 10px;font-size:11px;border:.5px solid var(--border);border-radius:20px;background:var(--bg);color:var(--muted);cursor:pointer;font-family:inherit;transition:all .15s;}
+.jf-btn.active{border-color:var(--pm);background:var(--pl);color:var(--purple);}
+.fi{display:flex;align-items:center;gap:8px;background:var(--surface);border:.5px solid var(--border);border-radius:var(--r-md);padding:8px 12px;}
+.fr{font-size:11px;color:var(--muted);min-width:18px;}
+.fjp{font-size:14px;color:var(--text);flex:1;font-family:'Noto Sans JP',sans-serif;}
+.fko{font-size:12px;color:var(--muted);flex:1;}
+.fbw{width:44px;height:3px;background:var(--bg);border-radius:2px;}
+.fb{height:100%;border-radius:2px;background:var(--pm);}
+.fcnt{font-size:11px;font-weight:500;padding:2px 7px;border-radius:8px;background:var(--pl);color:var(--purple);}
+.jlpt-tag{font-size:10px;padding:2px 6px;border-radius:6px;font-weight:500;flex-shrink:0;}
+.aqb{font-size:10px;padding:2px 7px;border-radius:8px;border:.5px solid #5DCAA5;background:var(--tl);color:#085041;cursor:pointer;font-family:inherit;}
+.aqb.added{background:#9FE1CB;border-color:var(--teal);cursor:default;}
+
+/* Quiz */
+.qcard{background:var(--surface);border:.5px solid var(--border);border-radius:var(--r-lg);padding:1.25rem;margin-bottom:1rem;}
+.qqsrc{font-size:10px;color:var(--muted);margin-bottom:5px;}
+.qqq{font-size:20px;color:var(--text);margin-bottom:.75rem;font-family:'Noto Sans JP',sans-serif;}
+.qopts{display:flex;flex-direction:column;gap:7px;}
+.qo{padding:10px 14px;border:.5px solid var(--border2);border-radius:var(--r-md);background:var(--surface);font-size:13px;cursor:pointer;text-align:left;color:var(--text);transition:all .15s;font-family:inherit;}
+.qo:hover:not(:disabled){background:var(--bg);}
+.qo.correct{background:var(--green-l);border-color:#639922;color:#27500A;}
+.qo.wrong{background:var(--red-l);border-color:var(--red);color:#501313;}
+.nqb{margin-top:.75rem;width:100%;padding:11px;background:var(--purple);color:#fff;border:none;border-radius:var(--r-md);font-size:13px;cursor:pointer;display:none;font-family:inherit;}
+.nqb:hover{background:#3C3489;}
+.qscore-bar{display:flex;align-items:center;gap:8px;margin-bottom:.875rem;}
+.qs-label{font-size:12px;color:var(--muted);}
+.qs-nums{font-size:14px;font-weight:500;color:var(--purple);margin-left:auto;}
+
+/* Stats */
+.stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:1rem;}
+.stat-card{background:var(--bg);border-radius:var(--r-md);padding:.875rem 1rem;}
+.stat-n{font-size:28px;font-weight:500;color:var(--purple);}
+.stat-l{font-size:11px;color:var(--muted);margin-top:2px;}
+.chart-wrap{background:var(--surface);border:.5px solid var(--border);border-radius:var(--r-lg);padding:1rem;margin-bottom:1rem;}
+.chart-title{font-size:13px;font-weight:500;margin-bottom:.75rem;}
+.jlpt-dist{display:flex;flex-direction:column;gap:6px;}
+.jd-row{display:flex;align-items:center;gap:10px;font-size:12px;}
+.jd-label{min-width:32px;font-weight:500;}
+.jd-bar-wrap{flex:1;height:8px;background:var(--bg);border-radius:4px;overflow:hidden;}
+.jd-bar{height:100%;border-radius:4px;transition:width .5s;}
+.jd-count{min-width:28px;text-align:right;color:var(--muted);}
+.streak-row{display:flex;gap:4px;flex-wrap:wrap;margin-top:.5rem;}
+.streak-day{width:20px;height:20px;border-radius:4px;font-size:9px;display:flex;align-items:center;justify-content:center;font-weight:500;}
+.sd-done{background:var(--teal);color:#fff;}.sd-empty{background:var(--bg);border:.5px solid var(--border);color:var(--muted);}
+
+/* Wrong notes */
+.wrong-note{background:var(--surface);border:.5px solid var(--border);border-radius:var(--r-lg);padding:1rem;margin-bottom:8px;position:relative;}
+.wn-q{font-size:16px;font-weight:500;font-family:'Noto Sans JP',sans-serif;margin-bottom:4px;}
+.wn-correct{font-size:13px;color:var(--green);margin-bottom:3px;}
+.wn-wrong{font-size:12px;color:var(--red);margin-bottom:6px;}
+.wn-meta{display:flex;align-items:center;gap:8px;}
+.wn-cnt{font-size:11px;color:var(--muted);}
+.wn-add-quiz{font-size:11px;padding:3px 9px;border-radius:8px;border:.5px solid var(--pm);background:var(--pl);color:var(--purple);cursor:pointer;font-family:inherit;}
+.wn-del{position:absolute;top:10px;right:10px;font-size:11px;color:var(--muted);cursor:pointer;padding:2px 6px;border-radius:6px;border:.5px solid var(--border);}
+.wn-del:hover{background:var(--red-l);color:var(--red);border-color:var(--red);}
+
+/* Error log */
+.err-entry{border:.5px solid var(--border);border-radius:var(--r-md);padding:10px 12px;margin-bottom:7px;font-size:12px;}
+.err-header{display:flex;align-items:center;gap:8px;margin-bottom:5px;}
+.err-tag{background:var(--red-l);color:var(--red);padding:2px 7px;border-radius:8px;font-size:10px;font-weight:500;}
+.err-time{color:var(--muted);font-size:11px;}
+.err-model{margin-left:auto;background:var(--pl);color:var(--purple);padding:2px 7px;border-radius:8px;font-size:10px;}
+.err-ctx{color:var(--text);font-weight:500;margin-bottom:3px;}
+.err-msg{color:var(--red);margin-bottom:3px;}
+.err-detail{background:var(--bg);border-radius:6px;padding:6px 8px;margin-top:5px;font-size:11px;color:var(--muted);word-break:break-all;white-space:pre-wrap;}
+
+.empty{text-align:center;padding:2.5rem 1rem;color:var(--muted);font-size:13px;line-height:1.8;}
+.empty-icon{font-size:28px;margin-bottom:8px;}
+.ld{display:inline-flex;gap:3px;align-items:center;}
+.ld span{width:5px;height:5px;background:var(--purple);border-radius:50%;animation:db 1.2s infinite;}
+.ld span:nth-child(2){animation-delay:.2s}.ld span:nth-child(3){animation-delay:.4s}
+@keyframes db{0%,80%,100%{transform:translateY(0);opacity:.4}40%{transform:translateY(-5px);opacity:1}}
+.pulse{animation:pl .35s ease;}@keyframes pl{0%{transform:scale(1)}50%{transform:scale(1.12)}100%{transform:scale(1)}}
+@media(max-width:520px){.shell{border:none;}.main{padding:.875rem 1rem;}.hdr{padding:.875rem 1rem .625rem;}.nav{padding:0 1rem .625rem;}}
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- Header -->
+  <div class="hdr">
+    <div class="hdr-top">
+      <div>
+        <div class="atitle">일본어 학습 앱 🇯🇵</div>
+        <div class="asub">엣지 캐시 · JLPT 분류 · 통계 · 오답노트</div>
+      </div>
+      <div class="hdr-right">
+        <div class="saved-box"><span class="saved-num" id="sc">0</span>API 절약</div>
+        <button class="settings-btn" onclick="openSettings()" title="설정">⚙</button>
+      </div>
+    </div>
+    <div class="cbar">
+      <div class="cdot idle" id="cdot"></div>
+      <span id="clbl" style="font-size:11px;">준비 완료</span>
+      <div class="cstats">
+        <span style="font-size:11px;">L1 <b id="l1c">0</b></span>
+        <span style="font-size:11px;">L2 <b id="l2c">0</b></span>
+        <span style="font-size:11px;">히트율 <b id="hitr">-</b></span>
+      </div>
+    </div>
+    <div class="nav">
+      <button class="nb active" onclick="showSec('chat',this)">AI 회화</button>
+      <button class="nb" onclick="showSec('import',this)">가져오기</button>
+      <button class="nb" onclick="showSec('freq',this)">단어장</button>
+      <button class="nb" onclick="showSec('quiz',this)">퀴즈</button>
+      <button class="nb" onclick="showSec('stats',this)">통계</button>
+      <button class="nb" onclick="showSec('wrong',this)">오답노트</button>
+      <button class="nb" onclick="showSec('errlog',this)">오류로그</button>
+    </div>
+  </div>
+
+  <!-- Main -->
+  <div class="main">
+
+    <!-- CHAT -->
+    <div id="sec-chat" class="sec active">
+      <div class="chat-area" id="chat-area"></div>
+      <div class="qph">
+        <button class="qpb" onclick="sendQ('おはようございます')">おはようございます</button>
+        <button class="qpb" onclick="sendQ('ありがとう')">ありがとう</button>
+        <button class="qpb" onclick="sendQ('すみません')">すみません</button>
+        <button class="qpb" onclick="sendQ('今日の天気はいいですね')">今日の天気は？</button>
+      </div>
+      <div class="cia">
+        <input class="ci" id="ci" placeholder="일본어로 말해보세요..." onkeydown="if(event.key==='Enter')sendChat()"/>
+        <button class="sbtn" onclick="sendChat()">전송</button>
+      </div>
+    </div>
+
+    <!-- IMPORT -->
+    <div id="sec-import" class="sec">
+      <div class="stitle">텍스트 가져오기</div>
+      <div class="tab-row">
+        <button class="tp active" id="tp-paste" onclick="switchIT('paste')">붙여넣기</button>
+        <button class="tp" id="tp-kakao" onclick="switchIT('kakao')">카카오톡 파일</button>
+      </div>
+      <div id="ip-paste">
+        <div class="sdesc">일본어 뉴스, 기사 등을 붙여넣으면 자동으로 문장을 추출해서 번역하고 단어장에 등록해요.</div>
+        <textarea class="paste-area" id="paste-txt" placeholder="여기에 일본어 텍스트를 붙여넣으세요...&#10;&#10;예시:&#10;今日は天気がいいですね。&#10;東京で日本語を勉強しています。"></textarea>
+        <button class="abtn" id="abtn" onclick="doPaste()">분석 시작</button>
+      </div>
+      <div id="ip-kakao" style="display:none;">
+        <div class="kakao-guide">
+          <strong>📱 카카오톡 내보내기 방법</strong><br>
+          채팅방 → 오른쪽 상단 메뉴(≡) → 대화 내보내기 → 텍스트(.txt) 저장
+        </div>
+        <div class="dropzone" id="dz" onclick="document.getElementById('fi').click()"
+          ondragover="event.preventDefault();this.classList.add('drag')"
+          ondragleave="this.classList.remove('drag')"
+          ondrop="onDrop(event)">
+          <div style="font-size:26px;margin-bottom:8px;">📂</div>
+          <div style="font-size:13px;color:var(--muted);">카카오톡 .txt 파일 업로드</div>
+          <div style="font-size:11px;color:var(--border2);margin-top:4px;">클릭하거나 드래그하세요</div>
+        </div>
+        <input type="file" id="fi" accept=".txt" style="display:none" onchange="onFile(this.files[0])"/>
+      </div>
+      <div id="imp-result"></div>
+    </div>
+
+    <!-- FREQ -->
+    <div id="sec-freq" class="sec">
+      <div class="stitle">빈도 단어장</div>
+      <div class="jlpt-filter">
+        <button class="jf-btn active" onclick="setJFilter('all',this)">전체</button>
+        <button class="jf-btn" onclick="setJFilter('N5',this)">N5</button>
+        <button class="jf-btn" onclick="setJFilter('N4',this)">N4</button>
+        <button class="jf-btn" onclick="setJFilter('N3',this)">N3</button>
+        <button class="jf-btn" onclick="setJFilter('N2',this)">N2</button>
+        <button class="jf-btn" onclick="setJFilter('미분류',this)">미분류</button>
+      </div>
+      <div id="freq-list" style="display:flex;flex-direction:column;gap:6px;">
+        <div class="empty"><div class="empty-icon">📚</div>아직 데이터가 없어요.<br>대화하거나 텍스트를 가져와보세요!</div>
+      </div>
+    </div>
+
+    <!-- QUIZ -->
+    <div id="sec-quiz" class="sec">
+      <div class="stitle">자동 생성 퀴즈</div>
+      <div id="quiz-content">
+        <div class="empty"><div class="empty-icon">🎯</div>퀴즈가 아직 없어요.<br>단어장에서 추가하거나 5회 이상 대화해보세요!</div>
+      </div>
+    </div>
+
+    <!-- STATS -->
+    <div id="sec-stats" class="sec">
+      <div class="stitle">학습 통계</div>
+      <div class="stats-grid">
+        <div class="stat-card"><div class="stat-n" id="st-total">0</div><div class="stat-l">총 번역 횟수</div></div>
+        <div class="stat-card"><div class="stat-n" id="st-words">0</div><div class="stat-l">학습한 단어</div></div>
+        <div class="stat-card"><div class="stat-n" id="st-quiz-done">0</div><div class="stat-l">퀴즈 풀이 수</div></div>
+        <div class="stat-card"><div class="stat-n" id="st-accuracy">-</div><div class="stat-l">정답률</div></div>
+      </div>
+      <div class="chart-wrap">
+        <div class="chart-title">퀴즈 정답/오답 추이 (최근 20회)</div>
+        <canvas id="quiz-chart" height="140"></canvas>
+      </div>
+      <div class="chart-wrap">
+        <div class="chart-title">JLPT 레벨별 단어 분포</div>
+        <div class="jlpt-dist" id="jlpt-dist"></div>
+      </div>
+      <div class="chart-wrap">
+        <div class="chart-title">학습 스트릭 (최근 14일)</div>
+        <div class="streak-row" id="streak-row"></div>
+      </div>
+    </div>
+
+    <!-- WRONG NOTES -->
+    <div id="sec-wrong" class="sec">
+      <div class="stitle">오답 노트</div>
+      <div id="wrong-list">
+        <div class="empty"><div class="empty-icon">📝</div>오답이 아직 없어요.<br>퀴즈를 풀면 틀린 문제가 여기에 기록돼요!</div>
+      </div>
+    </div>
+
+    <!-- ERROR LOG -->
+    <div id="sec-errlog" class="sec">
+      <div class="stitle">오류 로그</div>
+      <div class="sdesc" style="margin-bottom:1rem;">API 호출 중 발생한 오류가 자동으로 기록돼요. HTTP 상태코드, Gemini 에러 메시지, 종료 이유까지 확인할 수 있어요.</div>
+      <div style="display:flex;justify-content:flex-end;margin-bottom:.75rem;">
+        <button onclick="clearErrors()" style="font-size:11px;padding:4px 12px;border-radius:8px;border:.5px solid var(--border2);background:var(--surface);color:var(--muted);cursor:pointer;font-family:inherit;">로그 지우기</button>
+      </div>
+      <div id="error-log">
+        <div class="empty"><div class="empty-icon">✅</div>아직 오류가 없어요!</div>
+      </div>
+    </div>
+
+  </div><!-- /main -->
+</div>
+
+<!-- Settings Modal -->
+<div class="modal-overlay" id="modal-overlay" onclick="closeSettingsOutside(event)">
+  <div class="modal" id="modal">
+    <div class="modal-handle"></div>
+    <div style="display:flex;align-items:center;margin-bottom:1rem;">
+      <div class="modal-title" style="margin-bottom:0;">설정</div>
+      <button class="modal-close" onclick="closeSettings()">✕</button>
+    </div>
+
+    <!-- API Key section -->
+    <div class="field-label">Gemini API 키</div>
+    <div class="field-desc">
+      Google AI Studio (<b>aistudio.google.com</b>)에서 발급받은 키를 입력하세요.<br>
+      키는 이 기기 로컬에만 저장되며 외부로 전송되지 않아요.
+    </div>
+
+    <div id="key-saved-area" style="display:none;">
+      <div class="key-saved-badge">✓ API 키 저장됨</div>
+    </div>
+
+    <div class="key-input-wrap">
+      <input class="key-input" id="key-input" type="password" placeholder="AIza...로 시작하는 API 키 입력"/>
+      <button class="save-btn" onclick="saveApiKey()">저장</button>
+    </div>
+    <div class="key-status" id="key-status"></div>
+
+    <button onclick="toggleKeyVisibility()" style="font-size:11px;color:var(--muted);background:none;border:none;cursor:pointer;margin-bottom:12px;padding:0;font-family:inherit;" id="toggle-vis-btn">🔒 키 보기</button>
+
+    <hr class="divider">
+
+    <!-- Model selector -->
+    <div class="field-label" style="margin-bottom:5px;">Gemini 모델 선택</div>
+    <div class="field-desc">현재 사용 중인 모델: <b id="cur-model-label">gemini-2.5-flash</b></div>
+    <div class="model-grid" id="model-grid">
+      <button class="mbtn active" data-model="gemini-2.5-flash" onclick="selectModel(this)">
+        <span class="mbtn-name">gemini-2.5-flash</span>
+        <span class="mbtn-desc">권장 · 빠르고 안정적</span>
+      </button>
+      <button class="mbtn" data-model="gemini-2.5-pro-preview-03-25" onclick="selectModel(this)">
+        <span class="mbtn-name">gemini-2.5-pro</span>
+        <span class="mbtn-desc">고성능 · 더 상세한 답변</span>
+      </button>
+      <button class="mbtn" data-model="gemini-2.0-flash" onclick="selectModel(this)">
+        <span class="mbtn-name">gemini-2.0-flash</span>
+        <span class="mbtn-desc">2026년 6월 종료 예정</span>
+      </button>
+      <button class="mbtn" data-model="gemini-2.0-flash-lite" onclick="selectModel(this)">
+        <span class="mbtn-name">gemini-2.0-flash-lite</span>
+        <span class="mbtn-desc">저비용 · 2026년 6월 종료</span>
+      </button>
+    </div>
+
+    <div class="warning-box" style="margin-top:8px;margin-bottom:12px;">
+      ⚠ Gemini 1.0 · 1.5 계열은 이미 종료됨 (요청 시 404 에러)<br>
+      Gemini 2.0 계열은 2026년 6월 1일 종료 예정
+    </div>
+
+    <hr class="divider">
+
+    <!-- Token settings -->
+    <div class="field-label" style="margin-bottom:8px;">답변 길이 (max output tokens)</div>
+    <div class="token-row">
+      <span class="token-label">현재 설정</span>
+      <span class="token-val" id="token-val-display">2048</span>
+    </div>
+    <input type="range" min="512" max="4096" step="256" value="2048" id="token-slider"
+      style="width:100%;margin:8px 0;"
+      oninput="updateTokenDisplay(this.value)"/>
+    <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:4px;">
+      <span>512 (짧음)</span><span>2048 (권장)</span><span>4096 (긴 답변)</span>
+    </div>
+    <div style="font-size:11px;color:var(--muted);line-height:1.6;margin-bottom:12px;">
+      800 이하로 설정하면 답변이 잘려서 오류가 날 수 있어요. 2048 이상 권장.
+    </div>
+
+    <button onclick="saveSettings()" style="width:100%;padding:12px;background:var(--purple);color:#fff;border:none;border-radius:var(--r-md);font-size:14px;cursor:pointer;font-family:inherit;font-weight:500;margin-bottom:.5rem;">설정 저장</button>
+    <button onclick="closeSettings()" style="width:100%;padding:10px;background:var(--bg);color:var(--muted);border:.5px solid var(--border);border-radius:var(--r-md);font-size:13px;cursor:pointer;font-family:inherit;">닫기</button>
+  </div>
+</div>
+
+<script>
+// ── Config (loaded from localStorage) ──
+var CFG = {
+  apiKey: localStorage.getItem('jp_api_key') || '',
+  model:  localStorage.getItem('jp_model')   || 'gemini-2.5-flash',
+  maxTokens: parseInt(localStorage.getItem('jp_max_tokens') || '2048', 10)
+};
+
+function geminiEndpoint() {
+  return 'https://generativelanguage.googleapis.com/v1beta/models/' + CFG.model + ':generateContent';
+}
+
+// ── Error log ──
+var errorLog = [];
+function logError(ctx, msg, httpStatus, apiErr, finishReason) {
+  errorLog.unshift({
+    time: new Date().toLocaleTimeString(),
+    ctx: ctx,
+    msg: msg,
+    httpStatus: httpStatus || null,
+    apiErr: apiErr ? JSON.stringify(apiErr, null, 2).slice(0, 400) : null,
+    finishReason: finishReason || null,
+    model: CFG.model
+  });
+  if (errorLog.length > 50) errorLog.pop();
+  renderErrorLog();
+  setCUI('miss', '오류 발생 — 오류로그 탭 확인');
+}
+function clearErrors() {
+  errorLog = [];
+  renderErrorLog();
+}
+function renderErrorLog() {
+  var el = document.getElementById('error-log');
+  if (!el) return;
+  if (errorLog.length === 0) {
+    el.innerHTML = '<div class="empty"><div class="empty-icon">✅</div>아직 오류가 없어요!</div>';
+    return;
+  }
+  el.innerHTML = errorLog.map(function(e) {
+    var detail = '';
+    if (e.httpStatus) detail += 'HTTP ' + e.httpStatus + '\n';
+    if (e.finishReason) detail += 'finishReason: ' + e.finishReason + '\n';
+    if (e.apiErr) detail += e.apiErr;
+    return '<div class="err-entry">' +
+      '<div class="err-header">' +
+        '<span class="err-tag">오류</span>' +
+        '<span class="err-time">' + e.time + '</span>' +
+        '<span class="err-model">' + e.model + '</span>' +
+      '</div>' +
+      '<div class="err-ctx">' + escHtml(e.ctx) + '</div>' +
+      '<div class="err-msg">' + escHtml(e.msg) + '</div>' +
+      (detail ? '<div class="err-detail">' + escHtml(detail.trim()) + '</div>' : '') +
+    '</div>';
+  }).join('');
+}
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Cache (L1 memory + L2 localStorage) ──
+var L1 = {};
+function l2k(k) { try { return 'jpv6_' + btoa(unescape(encodeURIComponent(k))).slice(0,24); } catch(e) { return 'jpv6_' + k.slice(0,20); } }
+function l2g(k) { try { var v = localStorage.getItem(l2k(k)); return v ? JSON.parse(v) : null; } catch(e) { return null; } }
+function l2s(k,v) { try { localStorage.setItem(l2k(k), JSON.stringify(v)); } catch(e) {} }
+function l2count() { try { return Object.keys(localStorage).filter(function(k){ return k.startsWith('jpv6_'); }).length; } catch(e) { return 0; } }
+
+var totalR=0, apiC=0, hits=0;
+function setCUI(type, lbl) {
+  var d = document.getElementById('cdot');
+  var l = document.getElementById('clbl');
+  d.className = 'cdot ' + (type==='hit' ? 'hit' : type==='miss' ? 'miss' : 'idle');
+  l.textContent = lbl;
+  document.getElementById('l1c').textContent = Object.keys(L1).length;
+  document.getElementById('l2c').textContent = l2count();
+  var r = totalR > 0 ? Math.round((hits/totalR)*100) : 0;
+  document.getElementById('hitr').textContent = totalR > 0 ? r + '%' : '-';
+  var sc = document.getElementById('sc');
+  sc.textContent = hits;
+  if (type === 'hit') { sc.classList.remove('pulse'); void sc.offsetWidth; sc.classList.add('pulse'); }
+}
+
+// ── Translate with 3-layer cache ──
+async function translate(text) {
+  totalR++;
+  if (L1[text]) { hits++; setCUI('hit','L1 메모리 히트'); return Object.assign({}, L1[text], {_l:'L1'}); }
+  var l2 = l2g(text);
+  if (l2) { hits++; L1[text] = l2; setCUI('hit','L2 로컬스토리지 히트'); return Object.assign({}, l2, {_l:'L2'}); }
+
+  if (!CFG.apiKey) {
+    openSettings();
+    throw new Error('API 키가 설정되지 않았습니다. 설정(⚙)에서 Gemini API 키를 입력해주세요.');
+  }
+
+  apiC++; setCUI('miss', 'Gemini API 호출 중...');
+
+  var sys = '당신은 일본어 회화 선생님입니다. 학습자는 한국인 초급자(JLPT N5-N4)입니다.\n' +
+    '일본어로 먼저 답하고, 아래에 "💡 " 뒤에 한국어 번역과 간단한 문법 설명을 추가하세요.\n' +
+    '형식: 일본어 문장\n💡 한국어: [번역] / 설명: [문법]\n' +
+    '반드시 위 형식을 지켜주세요. 답변이 잘리지 않도록 완전한 문장으로 작성하세요.';
+
+  var geminiMsgs = chatH.map(function(m) {
+    return { role: m.role === 'assistant' ? 'model' : 'user', parts: [{text: m.content}] };
+  });
+  geminiMsgs.push({ role: 'user', parts: [{text: text}] });
+
+  var body = {
+    system_instruction: { parts: [{text: sys}] },
+    contents: geminiMsgs,
+    generationConfig: {
+      maxOutputTokens: CFG.maxTokens,
+      temperature: 0.7,
+      topP: 0.9
+    }
+  };
+
+  var res, data;
+  try {
+    res = await fetch(geminiEndpoint() + '?key=' + CFG.apiKey, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body)
+    });
+    data = await res.json();
+  } catch(e) {
+    logError('네트워크 오류 — translate("' + text.slice(0,20) + '")', e.message, null, null, null);
+    throw e;
+  }
+
+  if (!res.ok) {
+    var errMsg = (data && data.error && data.error.message) ? data.error.message : ('HTTP ' + res.status);
+    logError('API 오류 — translate("' + text.slice(0,20) + '")', errMsg, res.status, data && data.error, null);
+    throw new Error(errMsg);
+  }
+
+  var candidate = data && data.candidates && data.candidates[0];
+  if (!candidate) {
+    logError('응답 없음 — candidates 배열 비어있음', 'candidates가 없습니다. 모델명·API 키 확인 필요', res.status, data, null);
+    throw new Error('Gemini 응답에 candidates가 없습니다.');
+  }
+
+  var finishReason = candidate.finishReason;
+  if (finishReason && finishReason !== 'STOP') {
+    logError('비정상 종료 — ' + finishReason,
+      finishReason === 'MAX_TOKENS' ? '답변이 토큰 한도 초과로 잘렸어요. 설정에서 max tokens를 높여보세요.' :
+      finishReason === 'SAFETY' ? '안전 필터에 의해 차단됐어요.' : '비정상 종료: ' + finishReason,
+      res.status, {finishReason: finishReason, safetyRatings: candidate.safetyRatings}, finishReason);
+  }
+
+  var reply = (candidate.content && candidate.content.parts && candidate.content.parts[0] && candidate.content.parts[0].text) ? candidate.content.parts[0].text : 'すみません。';
+  var parts = reply.split('\n💡 ');
+  var result = {jp: parts[0], ko: parts[1] || '', raw: reply};
+  L1[text] = result;
+  l2s(text, result);
+  setCUI('idle', 'Gemini → 캐시 저장');
+  return Object.assign({}, result, {_l:'API'});
+}
+
+// ── JLPT classification ──
+var JLPT_N5 = new Set(['水','火','山','川','木','花','犬','猫','魚','鳥','人','男','女','子供','先生','学校','本','車','電車','食べる','飲む','行く','来る','見る','聞く','話す','読む','書く','買う','売る','大きい','小さい','新しい','古い','高い','安い','早い','遅い','今日','明日','昨日','今','時間','日','月','年','私','友達','家族','父','母','ありがとう','すみません','おはよう','こんにちは']);
+var JLPT_N4 = new Set(['仕事','会社','社員','会議','電話','銀行','病院','薬','医者','駅','空港','天気','雨','雪','風','春','夏','秋','冬','朝','昼','夜','週','毎日','勉強','試験','旅行','予約','便利','大切','特別','普通','有名','簡単','難しい','嬉しい','悲しい','忙しい','疲れる','楽しむ','始める','終わる','教える','覚える','忘れる','考える']);
+var JLPT_N3 = new Set(['経済','政治','社会','文化','環境','技術','科学','医学','教育','研究','発展','影響','関係','解決','方法','理由','目的','結果','効果','状況','意見','可能','必要','重要','複雑','正確','適切','具体的','一般的','国際','地域','現代','伝統','自然','人工']);
+var JLPT_N2 = new Set(['概念','抽象','論理','批判','評価','分析','統計','確率','理論','仮説','実験','証明','観察','比較','考察','結論','前提','矛盾','議論','主張','反論','根拠','証拠','客観','主観','視点','背景','文脈','条件','要因','変数','定義','規則','原則','方針','基準']);
+
+function classifyJLPT(jp) {
+  var chars = jp.split('').filter(function(c){ return /[\u3040-\u30ff\u4e00-\u9fff]/.test(c); });
+  if (chars.length === 0) return '미분류';
+  if (JLPT_N5.has(jp)) return 'N5';
+  if (JLPT_N4.has(jp)) return 'N4';
+  if (JLPT_N3.has(jp)) return 'N3';
+  if (JLPT_N2.has(jp)) return 'N2';
+  for (var i=0; i<chars.length; i++) {
+    if (JLPT_N5.has(chars[i])) return 'N5';
+    if (JLPT_N4.has(chars[i])) return 'N4';
+  }
+  if (jp.length <= 2) return 'N5';
+  if (jp.length <= 4) return 'N4';
+  return '미분류';
+}
+
+// ── Frequency tracker ──
+var FREQ = {};
+var QP = [];
+var studyDays = new Set();
+
+function trackF(jp, ko) {
+  if (!jp || jp.trim().length < 2) return;
+  var k = jp.trim();
+  if (FREQ[k]) { FREQ[k].count++; if (ko) FREQ[k].ko = ko; }
+  else { FREQ[k] = {jp:k, ko:ko||'', count:1, inQ:false, jlpt:classifyJLPT(k)}; }
+  if (FREQ[k].count >= 5 && !FREQ[k].inQ) { FREQ[k].inQ = true; addQ(k, FREQ[k].ko, '빈도 자동 (5회+)'); }
+  studyDays.add(new Date().toISOString().slice(0,10));
+}
+function addQ(jp, ko, src) {
+  if (QP.find(function(q){ return q.jp === jp; })) return;
+  QP.push({jp:jp, ko:ko, src:src});
+}
+function manQ(jp, ko) {
+  if (FREQ[jp]) FREQ[jp].inQ = true;
+  addQ(jp, ko||'', '수동 추가');
+  renderFreq(); renderQuiz();
+}
+
+// ── Chat ──
+var chatH = [];
+function addMsg(type, jp, ko, layer) {
+  var a = document.getElementById('chat-area');
+  var d = document.createElement('div');
+  d.className = 'msg ' + type;
+  var b = layer ? '<div><span class="mbadge ' + (layer==='L1'?'bl1':layer==='L2'?'bl2':'bapi') + '">' + (layer==='L1'?'L1 메모리':layer==='L2'?'L2 저장':'API 호출') + '</span></div>' : '';
+  d.innerHTML = '<div class="mjp">' + jp + '</div>' + (ko ? '<div class="mko">' + ko + '</div>' : '') + b;
+  a.appendChild(d); a.scrollTop = a.scrollHeight;
+}
+function addLd() {
+  var a = document.getElementById('chat-area'), d = document.createElement('div');
+  d.className = 'msg ai'; d.id = 'ldm';
+  d.innerHTML = '<div class="ld"><span></span><span></span><span></span></div>';
+  a.appendChild(d); a.scrollTop = a.scrollHeight;
+}
+function rmLd() { var e = document.getElementById('ldm'); if(e) e.remove(); }
+function sendQ(t) { document.getElementById('ci').value = t; sendChat(); }
+
+async function sendChat() {
+  var inp = document.getElementById('ci'), text = inp.value.trim();
+  if (!text) return;
+  inp.value = ''; addMsg('user', text, ''); chatH.push({role:'user', content:text}); addLd();
+  try {
+    var r = await translate(text); rmLd();
+    addMsg('ai', r.jp, r.ko ? '💡 ' + r.ko : '', r._l);
+    chatH.push({role:'assistant', content:r.raw||r.jp});
+    var ko = r.ko ? r.ko.split('/')[0].replace('한국어: ','').trim() : '';
+    trackF(text, ko);
+    var ws = r.jp.match(/[\u3040-\u30ff\u4e00-\u9fff]{2,}/g) || [];
+    ws.forEach(function(w){ trackF(w,''); });
+  } catch(e) {
+    rmLd();
+    addMsg('ai', 'エラーが発生しました。', '오류: ' + e.message, null);
+  }
+}
+
+// ── Import ──
+function switchIT(tab) {
+  ['paste','kakao'].forEach(function(t) {
+    document.getElementById('tp-'+t).classList.toggle('active', t===tab);
+    document.getElementById('ip-'+t).style.display = t===tab ? '' : 'none';
+  });
+  document.getElementById('imp-result').innerHTML = '';
+}
+function extractJP(text) {
+  var lines = text.split(/[。！？\n]/);
+  var seen = {};
+  var result = [];
+  lines.forEach(function(l) {
+    l = l.trim();
+    if (l.length < 3 || l.length > 80) return;
+    var jp = (l.match(/[\u3040-\u30ff\u4e00-\u9fff]/g) || []).length;
+    if (jp/l.length > 0.15 && !seen[l]) { seen[l]=1; result.push(l); }
+  });
+  return result.slice(0,30);
+}
+function parseKakao(text) {
+  var lines = text.split('\n'), seen = {}, result = [];
+  lines.forEach(function(l) {
+    var m = l.match(/,\s*([^,:\n]{1,30})\s*:\s*(.+)$/);
+    var c = m ? m[2].trim() : l.trim();
+    var jp = (c.match(/[\u3040-\u30ff\u4e00-\u9fff]/g) || []).length;
+    if (jp > 0 && c.length > 1 && c.length < 80 && !seen[c]) { seen[c]=1; result.push(c); }
+  });
+  return result.slice(0,30);
+}
+
+async function analyzeTexts(sents, badgeCls, label) {
+  var res = document.getElementById('imp-result');
+  if (sents.length === 0) {
+    res.innerHTML = '<div class="rcard"><div style="font-size:13px;color:var(--muted);padding:.5rem 0;">일본어 문장을 찾지 못했어요.</div></div>';
+    return;
+  }
+  function mkId(s) { try { return btoa(unescape(encodeURIComponent(s.slice(0,8)))).replace(/[^a-zA-Z0-9]/g,'').slice(0,8); } catch(e) { return Math.random().toString(36).slice(2,10); } }
+  var ids = sents.map(mkId);
+  res.innerHTML = '<div class="rcard"><span class="sbadge ' + badgeCls + '">' + label + '</span>' +
+    '<div class="rstats">' +
+      '<div class="rs"><div class="rsn">' + sents.length + '</div><div class="rsl">추출 문장</div></div>' +
+      '<div class="rs"><div class="rsn" id="id0">0</div><div class="rsl">번역 완료</div></div>' +
+      '<div class="rs"><div class="rsn" id="id1">0</div><div class="rsl">캐시 히트</div></div>' +
+    '</div>' +
+    '<div class="pw"><div class="pf" id="pf" style="width:0%"></div></div>' +
+    '<div class="slist">' + sents.map(function(s,i) {
+      return '<div class="si"><div class="si-jp">' + s + '</div><div class="si-ko" id="k'+ids[i]+'"><span class="ld"><span></span><span></span><span></span></span></div><span class="sst sw" id="s'+ids[i]+'">대기</span></div>';
+    }).join('') + '</div></div>';
+
+  var done=0, cached=0;
+  for (var i=0; i<sents.length; i++) {
+    var s=sents[i], id=ids[i];
+    var ke=document.getElementById('k'+id), se=document.getElementById('s'+id);
+    try {
+      var r = await translate(s);
+      var ko = r.ko ? r.ko.split('/')[0].replace('한국어: ','').trim() : '';
+      if(ke) ke.textContent = ko||'-';
+      var c = r._l !== 'API'; if(c) cached++;
+      if(se) { se.textContent = c?'캐시':'번역'; se.className='sst '+(c?'sc':'sd'); }
+      trackF(s, ko);
+      (s.match(/[\u3040-\u30ff\u4e00-\u9fff]{2,}/g)||[]).forEach(function(w){ trackF(w,''); });
+    } catch(e) {
+      if(ke) ke.textContent='-';
+      if(se) { se.textContent='오류'; se.className='sst sw'; }
+    }
+    done++;
+    var d0=document.getElementById('id0'), d1=document.getElementById('id1'), pf=document.getElementById('pf');
+    if(d0) d0.textContent=done; if(d1) d1.textContent=cached;
+    if(pf) pf.style.width=Math.round((done/sents.length)*100)+'%';
+    await new Promise(function(resolve){ setTimeout(resolve,180); });
+  }
+  setCUI('idle', '완료 — '+done+'문장 / 캐시 '+cached+'개');
+}
+
+async function doPaste() {
+  var txt=document.getElementById('paste-txt').value.trim(); if(!txt) return;
+  var btn=document.getElementById('abtn'); btn.disabled=true; btn.textContent='분석 중...';
+  await analyzeTexts(extractJP(txt),'spaste','붙여넣기');
+  btn.disabled=false; btn.textContent='분석 시작';
+}
+function onDrop(e) { e.preventDefault(); document.getElementById('dz').classList.remove('drag'); var f=e.dataTransfer.files[0]; if(f) onFile(f); }
+function onFile(f) {
+  if(!f) return;
+  var r=new FileReader();
+  r.onload=function(e) {
+    var txt=e.target.result;
+    var sents=parseKakao(txt);
+    var isKk=sents.length>2;
+    if(!isKk) sents=extractJP(txt);
+    analyzeTexts(sents, isKk?'skk':'snews', isKk?'카카오톡 대화':'텍스트 파일');
+  };
+  r.readAsText(f,'utf-8');
+}
+
+// ── Freq render ──
+var jFilter='all';
+var jBg={'N5':'#EAF3DE','N4':'#E6F1FB','N3':'#EEEDFE','N2':'#FAEEDA','미분류':'#F1EFE8'};
+var jColor={'N5':'#3B6D11','N4':'#0C447C','N3':'#534AB7','N2':'#854F0B','미분류':'#7a7870'};
+
+function setJFilter(f, el) {
+  jFilter=f;
+  document.querySelectorAll('.jf-btn').forEach(function(b){ b.classList.remove('active'); });
+  el.classList.add('active');
+  renderFreq();
+}
+function renderFreq() {
+  var list=document.getElementById('freq-list');
+  var all=Object.values(FREQ).sort(function(a,b){ return b.count-a.count; });
+  var filtered=jFilter==='all' ? all : all.filter(function(e){ return e.jlpt===jFilter; });
+  if(filtered.length===0){ list.innerHTML='<div class="empty"><div class="empty-icon">'+(jFilter==='all'?'📚':'🔍')+'</div>'+(jFilter==='all'?'아직 데이터가 없어요.<br>대화하거나 텍스트를 가져와보세요!':'해당 레벨의 단어가 아직 없어요.')+'</div>'; return; }
+  var mx=filtered[0].count;
+  list.innerHTML=filtered.slice(0,30).map(function(e,i){
+    var safe_jp=e.jp.replace(/'/g,'&#39;').replace(/"/g,'&quot;');
+    var safe_ko=(e.ko||'').replace(/'/g,'&#39;').replace(/"/g,'&quot;');
+    return '<div class="fi">'+
+      '<div class="fr">'+(i+1)+'</div>'+
+      '<div class="fjp">'+e.jp+'</div>'+
+      '<div class="fko">'+(e.ko||'-')+'</div>'+
+      '<div class="fbw"><div class="fb" style="width:'+Math.round((e.count/mx)*100)+'%"></div></div>'+
+      '<div class="fcnt">'+e.count+'회</div>'+
+      '<span class="jlpt-tag" style="background:'+(jBg[e.jlpt]||'#F1EFE8')+';color:'+(jColor[e.jlpt]||'#7a7870')+'">'+e.jlpt+'</span>'+
+      '<button class="aqb'+(e.inQ?' added':'')+('"')+' onclick="manQ(\''+safe_jp+'\',\''+safe_ko+'\')" '+(e.inQ?'disabled':'')+'>'+
+        (e.inQ?'✓':'퀴즈+')+
+      '</button>'+
+    '</div>';
+  }).join('');
+}
+
+// ── Quiz ──
+var qIdx=0, qAns=false, quizTotal=0, quizCorrect=0, quizHistory=[], wrongNotes=[];
+
+function renderQuiz() {
+  var c=document.getElementById('quiz-content');
+  if(QP.length===0){ c.innerHTML='<div class="empty"><div class="empty-icon">🎯</div>퀴즈가 아직 없어요.<br>단어장에서 추가하거나 5회 이상 대화해보세요!</div>'; return; }
+  if(qIdx>=QP.length) qIdx=0;
+  qAns=false;
+  var q=QP[qIdx];
+  var pool=Object.values(FREQ).map(function(x){ return x.ko; }).filter(function(k){ return k && k!==q.ko; }).sort(function(){ return Math.random()-.5; }).slice(0,3);
+  var opts=[q.ko].concat(pool).filter(Boolean);
+  while(opts.length<4) opts.push('모르겠음');
+  opts=opts.sort(function(){ return Math.random()-.5; });
+  var acc=quizTotal>0?Math.round((quizCorrect/quizTotal)*100):0;
+  c.innerHTML='<div class="qscore-bar"><span class="qs-label">오늘 풀이</span><span class="qs-nums">'+quizCorrect+'/'+quizTotal+' ('+acc+'%)</span></div>'+
+    '<div style="font-size:12px;color:var(--muted);margin-bottom:.75rem;">'+(qIdx+1)+' / '+QP.length+'문제</div>'+
+    '<div class="qcard">'+
+      '<div class="qqsrc">'+q.src+'</div>'+
+      '<div class="qqq">'+q.jp+'</div>'+
+      '<div style="font-size:11px;color:var(--muted);margin-bottom:10px;">이 표현의 한국어 뜻은?</div>'+
+      '<div class="qopts">'+opts.map(function(o){
+        var so=o.replace(/'/g,'&#39;'), sq=(q.ko||'').replace(/'/g,'&#39;'), sjp=q.jp.replace(/'/g,'&#39;');
+        return '<button class="qo" onclick="chkQ(this,\''+so+'\',\''+sq+'\',\''+sjp+'\')">'+o+'</button>';
+      }).join('')+'</div>'+
+    '</div>'+
+    '<button class="nqb" id="nqb" onclick="nextQ()">다음 퀴즈 →</button>';
+}
+function chkQ(btn, ch, cr, jp) {
+  if(qAns) return; qAns=true;
+  document.querySelectorAll('.qo').forEach(function(b){ b.disabled=true; });
+  var correct=ch===cr;
+  quizTotal++; quizHistory.push({correct:correct,ts:Date.now()});
+  studyDays.add(new Date().toISOString().slice(0,10));
+  if(correct) { btn.classList.add('correct'); quizCorrect++; }
+  else {
+    btn.classList.add('wrong');
+    document.querySelectorAll('.qo').forEach(function(b){ if(b.textContent.trim()===cr) b.classList.add('correct'); });
+    var ex=wrongNotes.find(function(n){ return n.jp===jp; });
+    if(ex){ ex.count++; ex.myAnswer=ch; ex.timestamp=Date.now(); }
+    else wrongNotes.push({jp:jp,ko:cr,myAnswer:ch,count:1,src:QP[qIdx]?QP[qIdx].src:'',timestamp:Date.now()});
+  }
+  document.getElementById('nqb').style.display='block';
+}
+function nextQ() { qIdx++; renderQuiz(); }
+
+// ── Stats ──
+var chartInst=null;
+function renderStats() {
+  document.getElementById('st-total').textContent=totalR;
+  document.getElementById('st-words').textContent=Object.keys(FREQ).length;
+  document.getElementById('st-quiz-done').textContent=quizTotal;
+  document.getElementById('st-accuracy').textContent=quizTotal>0?Math.round((quizCorrect/quizTotal)*100)+'%':'-';
+  var ctx=document.getElementById('quiz-chart');
+  if(ctx){
+    var hist=quizHistory.slice(-20);
+    var labels=hist.map(function(_,i){ return (i+1)+'회'; });
+    var data=hist.map(function(h){ return h.correct?1:0; });
+    var colors=hist.map(function(h){ return h.correct?'#1D9E75':'#D85A30'; });
+    if(chartInst) chartInst.destroy();
+    chartInst=new Chart(ctx,{type:'bar',data:{labels:labels,datasets:[{data:data,backgroundColor:colors,borderRadius:4,borderSkipped:false}]},options:{responsive:true,plugins:{legend:{display:false},tooltip:{callbacks:{label:function(v){ return v.raw===1?'정답':'오답'; }}}},scales:{y:{display:false,max:1.2},x:{ticks:{font:{size:10},color:'#7a7870'},grid:{display:false}}},animation:{duration:400}}});
+  }
+  var dist={N5:0,N4:0,N3:0,N2:0,'미분류':0};
+  Object.values(FREQ).forEach(function(e){ dist[e.jlpt]=(dist[e.jlpt]||0)+1; });
+  var total=Object.keys(FREQ).length||1;
+  document.getElementById('jlpt-dist').innerHTML=Object.entries(dist).map(function(entry){
+    var lv=entry[0], cnt=entry[1];
+    return '<div class="jd-row"><span class="jd-label" style="color:'+(jColor[lv]||'#7a7870')+'">'+lv+'</span><div class="jd-bar-wrap"><div class="jd-bar" style="width:'+Math.round((cnt/total)*100)+'%;background:'+(jColor[lv]||'#7a7870')+'"></div></div><span class="jd-count">'+cnt+'개</span></div>';
+  }).join('');
+  var today=new Date(), days=[];
+  for(var i=13;i>=0;i--){ var d=new Date(today); d.setDate(d.getDate()-i); days.push(d.toISOString().slice(0,10)); }
+  document.getElementById('streak-row').innerHTML=days.map(function(d){
+    var done=studyDays.has(d), label=d.slice(8);
+    return '<div class="streak-day '+(done?'sd-done':'sd-empty')+'" title="'+d+'">'+label+'</div>';
+  }).join('');
+}
+
+// ── Wrong notes ──
+function renderWrong() {
+  var list=document.getElementById('wrong-list');
+  if(wrongNotes.length===0){ list.innerHTML='<div class="empty"><div class="empty-icon">📝</div>오답이 아직 없어요.<br>퀴즈를 풀면 틀린 문제가 여기에 기록돼요!</div>'; return; }
+  var sorted=wrongNotes.slice().sort(function(a,b){ return b.count-a.count; });
+  list.innerHTML=sorted.map(function(n,i){
+    var sj=n.jp.replace(/'/g,'&#39;').replace(/"/g,'&quot;'), sk=(n.ko||'').replace(/'/g,'&#39;').replace(/"/g,'&quot;');
+    return '<div class="wrong-note">'+
+      '<button class="wn-del" onclick="deleteWrong('+i+')">삭제</button>'+
+      '<div class="wn-q">'+n.jp+'</div>'+
+      '<div class="wn-correct">✓ 정답: '+n.ko+'</div>'+
+      '<div class="wn-wrong">✗ 내 답: '+n.myAnswer+'</div>'+
+      '<div class="wn-meta">'+
+        '<span class="wn-cnt">'+n.count+'회 틀림</span>'+
+        '<button class="wn-add-quiz" onclick="addWrongToQuiz(\''+sj+'\',\''+sk+'\')">퀴즈 재도전</button>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+}
+function deleteWrong(i) {
+  var sorted=wrongNotes.slice().sort(function(a,b){ return b.count-a.count; });
+  var item=sorted[i];
+  var idx=wrongNotes.findIndex(function(n){ return n.jp===item.jp; });
+  if(idx>=0) wrongNotes.splice(idx,1);
+  renderWrong();
+}
+function addWrongToQuiz(jp,ko) {
+  if(!QP.find(function(q){ return q.jp===jp; })) QP.push({jp:jp,ko:ko,src:'오답 재도전'});
+  renderQuiz();
+}
+
+// ── Settings modal ──
+function openSettings() {
+  var overlay=document.getElementById('modal-overlay');
+  overlay.classList.add('open');
+  // Fill current values
+  document.getElementById('key-input').value = CFG.apiKey ? '' : '';
+  updateKeySavedUI();
+  document.getElementById('token-slider').value = CFG.maxTokens;
+  document.getElementById('token-val-display').textContent = CFG.maxTokens;
+  document.getElementById('cur-model-label').textContent = CFG.model;
+  // Sync model buttons
+  document.querySelectorAll('.mbtn').forEach(function(b){
+    b.classList.toggle('active', b.dataset.model === CFG.model);
+  });
+}
+function closeSettings() { document.getElementById('modal-overlay').classList.remove('open'); }
+function closeSettingsOutside(e) { if(e.target===document.getElementById('modal-overlay')) closeSettings(); }
+
+function updateKeySavedUI() {
+  var area=document.getElementById('key-saved-area');
+  if(CFG.apiKey) { area.style.display='block'; }
+  else { area.style.display='none'; }
+}
+function saveApiKey() {
+  var v=document.getElementById('key-input').value.trim();
+  var st=document.getElementById('key-status');
+  if(!v){ st.className='key-status err'; st.textContent='API 키를 입력해주세요.'; return; }
+  if(!v.startsWith('AIza')){ st.className='key-status err'; st.textContent='⚠ 형식이 올바르지 않아요. AIza...로 시작해야 해요.'; return; }
+  CFG.apiKey=v;
+  localStorage.setItem('jp_api_key', v);
+  st.className='key-status ok'; st.textContent='✓ 저장됐어요!';
+  document.getElementById('key-input').value='';
+  updateKeySavedUI();
+}
+function toggleKeyVisibility() {
+  var inp=document.getElementById('key-input'), btn=document.getElementById('toggle-vis-btn');
+  if(inp.type==='password'){ inp.type='text'; btn.textContent='🔓 키 숨기기'; }
+  else { inp.type='password'; btn.textContent='🔒 키 보기'; }
+}
+function selectModel(btn) {
+  document.querySelectorAll('.mbtn').forEach(function(b){ b.classList.remove('active'); });
+  btn.classList.add('active');
+  document.getElementById('cur-model-label').textContent=btn.dataset.model;
+}
+function updateTokenDisplay(v) {
+  document.getElementById('token-val-display').textContent=v;
+}
+function saveSettings() {
+  // Save model
+  var activeModel=document.querySelector('.mbtn.active');
+  if(activeModel){ CFG.model=activeModel.dataset.model; localStorage.setItem('jp_model',CFG.model); }
+  // Save tokens
+  var tv=parseInt(document.getElementById('token-slider').value,10);
+  CFG.maxTokens=tv; localStorage.setItem('jp_max_tokens',String(tv));
+  closeSettings();
+  setCUI('idle', '설정 저장됨 — 모델: '+CFG.model+' / '+tv+' tokens');
+}
+
+// ── Nav ──
+function showSec(id, btn) {
+  document.querySelectorAll('.sec').forEach(function(s){ s.classList.remove('active'); });
+  document.querySelectorAll('.nb').forEach(function(b){ b.classList.remove('active'); });
+  document.getElementById('sec-'+id).classList.add('active');
+  if(btn) btn.classList.add('active');
+  if(id==='freq') renderFreq();
+  if(id==='quiz') renderQuiz();
+  if(id==='stats') renderStats();
+  if(id==='wrong') renderWrong();
+  if(id==='errlog') renderErrorLog();
+}
+
+// ── Init ──
+var pre=[
+  {jp:'おはようございます',ko:'안녕하세요 (아침)',raw:'おはようございます\n💡 한국어: 안녕하세요 (아침) / 설명: 아침 인사말'},
+  {jp:'ありがとうございます',ko:'감사합니다',raw:'ありがとうございます\n💡 한국어: 감사합니다 / 설명: 공손한 감사'},
+  {jp:'すみません',ko:'실례합니다',raw:'すみません\n💡 한국어: 실례합니다 / 설명: 사과·주의 끌기'},
+  {jp:'はじめまして',ko:'처음 뵙겠습니다',raw:'はじめまして\n💡 한국어: 처음 뵙겠습니다 / 설명: 처음 만남 인사'},
+  {jp:'水',ko:'물',raw:'水\n💡 한국어: 물 / 설명: N5 기초 단어'},
+  {jp:'食べる',ko:'먹다',raw:'食べる\n💡 한국어: 먹다 / 설명: N5 동사'},
+  {jp:'学校',ko:'학교',raw:'学校\n💡 한국어: 학교 / 설명: N5 명사'},
+  {jp:'仕事',ko:'일, 직업',raw:'仕事\n💡 한국어: 일, 직업 / 설명: N4 명사'},
+];
+pre.forEach(function(p){ L1[p.jp]=p; l2s(p.jp,p); trackF(p.jp,p.ko); });
+setCUI('idle', '사전 캐시 '+pre.length+'개 로드');
+
+// Init welcome message (after API key check)
+if (CFG.apiKey) {
+  addMsg('ai','こんにちは！','💡 한국어: 안녕하세요! — API 키가 설정됐어요. 바로 대화를 시작할 수 있어요 🎉',null);
+} else {
+  addMsg('ai','⚙ 설정이 필요해요','💡 오른쪽 상단 ⚙ 버튼을 눌러 Gemini API 키를 입력해주세요.',null);
+}
+</script>
+</body>
+</html>
