@@ -669,45 +669,67 @@ var STOP_WORDS = new Set([
   'ちゃんと','きっと','たぶん','もしか','なぜ','どうして','どこ','いつ','だれ',
   'これ','それ','あれ','この','その','あの','ここ','そこ','あそこ','こんな',
   'そんな','あんな','こう','そう','ああ','いい','ない','ある','いる','する',
-  'なる','くる','いく','いう','くれ','もら','あげ','くだ','ほし','たい'
+  'なる','くる','いく','いう','くれ','もら','あげ','くだ','ほし','たい',
+  'こと','もの','とき','ため','よう','ほど','くらい','など','まで','より',
+  'でも','だけ','しか','ばかり','さえ','ほか','ごと','たち','ども','がた'
 ]);
 
-function isGoodKeyword(w) {
-  if (!w || w.length < 2 || w.length > 5) return false;
-  // Must contain kanji or be meaningful kana word
-  var hasKanji = /[一-鿿]/.test(w);
-  var allKana = /^[぀-ヿ]+$/.test(w);
-  if (!hasKanji && !allKana) return false;
-  if (STOP_WORDS.has(w)) return false;
-  // Skip if it looks like a conjugation fragment (ends in te-form etc.)
-  if (allKana && w.length === 2 && /[てでにをはがもとでやか]$/.test(w)) return false;
-  return true;
-}
+// ── Vocabulary whitelist for clean keyword extraction ──
+var VOCAB_LIST = [
+  // N5 core
+  '今日','明日','昨日','天気','学校','友達','家族','時間','電車','仕事','会社',
+  '日本語','勉強','旅行','東京','大阪','先生','学生','毎日','今年','来年',
+  '食べる','飲む','行く','来る','見る','聞く','話す','読む','書く','買う','売る',
+  '水','火','山','川','木','花','犬','猫','魚','鳥','人','男','女','子供',
+  '本','車','部屋','家','店','国','駅','空港','病院','銀行','学校',
+  // N4 core
+  '会議','電話','住所','薬','医者','地図','雨','雪','風','練習','試験',
+  '春','夏','秋','冬','朝','昼','夜','週','父','母','兄','姉','弟','妹',
+  '文化','言語','語学','大学','高校','中学','小学','教室','図書館','公園',
+  '電気','ガス','水道','冷蔵庫','テレビ','コンピュータ',
+  // Compound words
+  '歩行者','信号','台湾','走る','日本','東京','大阪','京都','新幹線','飛行機',
+  '自転車','自動車','交差点','横断歩道','便利','不便','大切','特別','普通','有名'
+];
 
 function extractKeywords(text) {
-  // Extract 2-5 char Japanese word chunks - prioritize kanji compounds
+  if (!text) return [];
   var words = [];
-  // Kanji compounds: 2-4 kanji in a row
-  var kanjiChunks = text.match(/[一-鿿]{2,4}/g) || [];
-  kanjiChunks.forEach(function(w){ if(isGoodKeyword(w)) words.push(w); });
-  // Single kanji that are important vocab
-  var singleKanji = text.match(/[一-鿿]/g) || [];
-  singleKanji.forEach(function(w){ if(isGoodKeyword(w) && !words.includes(w)) words.push(w); });
-  // Kana words 3+ chars (nouns/verbs)
-  var kanaWords = text.match(/[぀-ヿ]{3,5}/g) || [];
-  kanaWords.forEach(function(w){ if(isGoodKeyword(w) && !words.includes(w)) words.push(w); });
-  return words.slice(0, 6); // max 6 keywords per sentence
+  var seen  = {};
+
+  // Step 1: scan for known vocabulary (longest match first = compound priority)
+  var sorted = VOCAB_LIST.slice().sort(function(a,b){ return b.length - a.length; });
+  sorted.forEach(function(w) {
+    if (text.indexOf(w) >= 0 && !seen[w]) {
+      seen[w] = 1;
+      words.push(w);
+    }
+  });
+  if (words.length >= 5) return words.slice(0, 5);
+
+  // Step 2: pure kanji runs 2-3 chars not already covered
+  var kanjiRuns = text.match(/[一-鿿]{2,3}/g) || [];
+  kanjiRuns.forEach(function(w) {
+    if (!seen[w] && !STOP_WORDS.has(w)) {
+      seen[w] = 1;
+      words.push(w);
+    }
+  });
+
+  return words.slice(0, 5);
 }
 
 function trackF(jp, ko) {
   if (!jp || jp.trim().length < 2) return;
   var k = jp.trim();
-  // Block: full sentences (contains 。！？ or too long)
-  if (k.length > 12 || /[。！？、]/.test(k)) return;
-  // Block: stop words
+  // Hard blocks: sentences, fragments, pure katakana, punctuation
+  if (k.length > 8) return;
+  if (/[。！？、「」『』・…]/.test(k)) return;
+  if (/^[゠-ヿ]+$/.test(k)) return; // pure katakana = foreign word fragment
   if (STOP_WORDS.has(k)) return;
-  // Block: pure kana under 3 chars (likely particles/fragments)
-  if (/^[぀-ヿ]+$/.test(k) && k.length < 3) return;
+  // Must contain kanji or meaningful hiragana
+  if (!/[一-鿿]/.test(k) && !/^[぀-ゟ]{3,}$/.test(k)) return;
+
   if (FREQ[k]) { FREQ[k].count++; if (ko) FREQ[k].ko = ko; }
   else { FREQ[k] = {jp:k, ko:ko||'', count:1, inQ:false, jlpt:classifyJLPT(k)}; }
   if (FREQ[k].count >= 3 && !FREQ[k].inQ && FREQ[k].ko) {
@@ -716,6 +738,7 @@ function trackF(jp, ko) {
   studyDays.add(new Date().toISOString().slice(0,10));
   saveState();
 }
+
 function trackSentenceKeywords(sentence, translationHint) {
   var keywords = extractKeywords(sentence);
   keywords.forEach(function(w){ trackF(w, ''); });
@@ -1103,8 +1126,13 @@ var pre=[
   {jp:'学校',ko:'학교',raw:'学校\n💡 한국어: 학교 / 설명: N5 명사'},
   {jp:'仕事',ko:'일, 직업',raw:'仕事\n💡 한국어: 일, 직업 / 설명: N4 명사'},
 ];
-pre.forEach(function(p){ L1[p.jp]=p; l2s(p.jp,p); trackF(p.jp,p.ko); });
-setCUI('idle', '사전 캐시 '+pre.length+'개 로드');
+// Only seed pre-built data on first launch (don't overwrite saved state)
+var isFirstLaunch = Object.keys(FREQ).length === 0;
+pre.forEach(function(p){
+  L1[p.jp]=p; l2s(p.jp,p);
+  if (isFirstLaunch) trackF(p.jp, p.ko);
+});
+setCUI('idle', isFirstLaunch ? '사전 캐시 '+pre.length+'개 로드' : '저장된 데이터 불러옴 ('+Object.keys(FREQ).length+'개 단어)');
 
 // Init welcome message (after API key check)
 if (CFG.apiKey) {
