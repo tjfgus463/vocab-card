@@ -5,6 +5,28 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>일본어 학습 앱</title>
 <meta name="version" content="202603180711">
+<script>
+// SW 강제 초기화 — 구버전 캐시 즉시 제거
+(function() {
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistrations().then(function(regs) {
+      regs.forEach(function(reg) {
+        reg.unregister();
+        console.log('[SW] 강제 해제:', reg.scope);
+      });
+    });
+    // SW 캐시 전체 삭제
+    if ('caches' in window) {
+      caches.keys().then(function(keys) {
+        keys.forEach(function(key) {
+          caches.delete(key);
+          console.log('[SW] 캐시 삭제:', key);
+        });
+      });
+    }
+  }
+})();
+</script>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#534AB7">
 <meta name="apple-mobile-web-app-capable" content="yes">
