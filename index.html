@@ -332,6 +332,8 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
         <div class="stat-card"><div class="stat-n" id="st-words">0</div><div class="stat-l">학습한 단어</div></div>
         <div class="stat-card"><div class="stat-n" id="st-quiz-done">0</div><div class="stat-l">퀴즈 풀이 수</div></div>
         <div class="stat-card"><div class="stat-n" id="st-accuracy">-</div><div class="stat-l">정답률</div></div>
+        <div class="stat-card"><div class="stat-n" id="st-due">0</div><div class="stat-l">오늘 복습할 단어</div></div>
+        <div class="stat-card"><div class="stat-n" id="st-mastered">0</div><div class="stat-l">마스터한 단어 (3회+)</div></div>
       </div>
       <div class="chart-wrap">
         <div class="chart-title">퀴즈 정답/오답 추이 (최근 20회)</div>
@@ -444,6 +446,13 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
     <div style="font-size:11px;color:var(--muted);line-height:1.6;margin-bottom:12px;">
       800 이하로 설정하면 답변이 잘려서 오류가 날 수 있어요. 2048 이상 권장.
     </div>
+
+    <hr class="divider">
+    <div class="field-label" style="margin-bottom:5px;">학습 알림</div>
+    <div class="field-desc">매일 저녁 8시, 오늘 학습을 안 했으면 알림을 보내드려요.</div>
+    <button onclick="requestNotificationPermission()" id="notif-btn"
+      style="width:100%;padding:10px;background:var(--bg);border:.5px solid var(--border2);border-radius:var(--r-md);font-size:13px;cursor:pointer;font-family:inherit;margin-bottom:12px;"
+      id="notif-btn">알림 허용하기</button>
 
     <button onclick="saveSettings()" style="width:100%;padding:12px;background:var(--purple);color:#fff;border:none;border-radius:var(--r-md);font-size:14px;cursor:pointer;font-family:inherit;font-weight:500;margin-bottom:.5rem;">설정 저장</button>
     <button onclick="closeSettings()" style="width:100%;padding:10px;background:var(--bg);color:var(--muted);border:.5px solid var(--border);border-radius:var(--r-md);font-size:13px;cursor:pointer;font-family:inherit;">닫기</button>
@@ -664,6 +673,8 @@ function saveState() {
     localStorage.setItem('jp_wrong', JSON.stringify(wrongNotes));
     localStorage.setItem('jp_qstats', JSON.stringify({total:quizTotal,correct:quizCorrect,history:quizHistory.slice(-50)}));
     localStorage.setItem('jp_days', JSON.stringify(Array.from(studyDays)));
+    localStorage.setItem('jp_srs', JSON.stringify(SRS));
+    localStorage.setItem('jp_daily', JSON.stringify({lastDate:dailyLastDate, dayIndex:dailyDayIndex}));
   } catch(e) {}
 }
 function loadState() {
@@ -678,6 +689,10 @@ function loadState() {
     if (qs) { var s = JSON.parse(qs); quizTotal=s.total||0; quizCorrect=s.correct||0; quizHistory=s.history||[]; }
     var dy = localStorage.getItem('jp_days');
     if (dy) { JSON.parse(dy).forEach(function(d){ studyDays.add(d); }); }
+    var sr = localStorage.getItem('jp_srs');
+    if (sr) { var srs = JSON.parse(sr); Object.keys(srs).forEach(function(k){ SRS[k]=srs[k]; }); }
+    var dl = localStorage.getItem('jp_daily');
+    if (dl) { var d2 = JSON.parse(dl); dailyLastDate=d2.lastDate||''; dailyDayIndex=d2.dayIndex||0; }
   } catch(e) {}
 }
 
@@ -954,16 +969,188 @@ function renderFreq() {
 // ── Quiz ──
 var qIdx=0, qAns=false, quizTotal=0, quizCorrect=0, quizHistory=[], wrongNotes=[];
 
+// ── SRS (Spaced Repetition System) ──
+// SRS[jp] = { interval:1, easeFactor:2.5, nextReview:'2026-03-18', correctStreak:0 }
+var SRS = {};
+var SRS_INTERVALS = [1, 3, 7, 14, 30]; // days between reviews
+
+function srsGetDue() {
+  var today = new Date().toISOString().slice(0,10);
+  return QP.filter(function(q) {
+    if (!q.ko) return false;
+    var s = SRS[q.jp];
+    if (!s) return true; // never reviewed = due
+    return s.nextReview <= today;
+  });
+}
+
+function srsUpdate(jp, correct) {
+  var today = new Date().toISOString().slice(0,10);
+  if (!SRS[jp]) SRS[jp] = {interval:0, easeFactor:2.5, nextReview:today, correctStreak:0};
+  var s = SRS[jp];
+  if (correct) {
+    s.correctStreak++;
+    var idx = Math.min(s.correctStreak, SRS_INTERVALS.length - 1);
+    s.interval = SRS_INTERVALS[idx];
+    s.easeFactor = Math.min(3.0, s.easeFactor + 0.1);
+  } else {
+    s.correctStreak = 0;
+    s.interval = 1; // review again tomorrow
+    s.easeFactor = Math.max(1.3, s.easeFactor - 0.2);
+  }
+  var next = new Date();
+  next.setDate(next.getDate() + s.interval);
+  s.nextReview = next.toISOString().slice(0,10);
+}
+
+// ── Daily Word System ──
+var dailyLastDate = '';
+var dailyDayIndex = 0;
+
+// 70 built-in words (7 days × 10) — fallback when no API key
+var DAILY_WORDS = [
+  // Day 1 - 인사 기초
+  [{jp:'おはようございます',ko:'안녕하세요 (아침)'},{jp:'こんにちは',ko:'안녕하세요 (낮)'},{jp:'こんばんは',ko:'안녕하세요 (저녁)'},
+   {jp:'ありがとう',ko:'고마워요'},{jp:'すみません',ko:'실례합니다'},{jp:'はい',ko:'네'},{jp:'いいえ',ko:'아니요'},
+   {jp:'わかりました',ko:'알겠습니다'},{jp:'はじめまして',ko:'처음 뵙겠습니다'},{jp:'よろしく',ko:'잘 부탁해요'}],
+  // Day 2 - 숫자·시간
+  [{jp:'今日',ko:'오늘'},{jp:'明日',ko:'내일'},{jp:'昨日',ko:'어제'},{jp:'今',ko:'지금'},
+   {jp:'朝',ko:'아침'},{jp:'昼',ko:'점심'},{jp:'夜',ko:'밤'},{jp:'週',ko:'주'},
+   {jp:'月',ko:'달/월'},{jp:'年',ko:'해/년'}],
+  // Day 3 - 기초 동사
+  [{jp:'食べる',ko:'먹다'},{jp:'飲む',ko:'마시다'},{jp:'行く',ko:'가다'},{jp:'来る',ko:'오다'},
+   {jp:'見る',ko:'보다'},{jp:'聞く',ko:'듣다/묻다'},{jp:'話す',ko:'말하다'},{jp:'読む',ko:'읽다'},
+   {jp:'書く',ko:'쓰다'},{jp:'買う',ko:'사다'}],
+  // Day 4 - 장소
+  [{jp:'学校',ko:'학교'},{jp:'家',ko:'집'},{jp:'駅',ko:'역'},{jp:'店',ko:'가게'},
+   {jp:'病院',ko:'병원'},{jp:'銀行',ko:'은행'},{jp:'公園',ko:'공원'},{jp:'空港',ko:'공항'},
+   {jp:'図書館',ko:'도서관'},{jp:'レストラン',ko:'레스토랑'}],
+  // Day 5 - 형용사
+  [{jp:'大きい',ko:'크다'},{jp:'小さい',ko:'작다'},{jp:'新しい',ko:'새롭다'},{jp:'古い',ko:'오래됐다'},
+   {jp:'高い',ko:'높다/비싸다'},{jp:'安い',ko:'싸다'},{jp:'難しい',ko:'어렵다'},{jp:'簡単',ko:'쉽다'},
+   {jp:'楽しい',ko:'즐겁다'},{jp:'面白い',ko:'재미있다'}],
+  // Day 6 - 사람·관계
+  [{jp:'私',ko:'나/저'},{jp:'あなた',ko:'당신'},{jp:'友達',ko:'친구'},{jp:'家族',ko:'가족'},
+   {jp:'先生',ko:'선생님'},{jp:'学生',ko:'학생'},{jp:'父',ko:'아버지'},{jp:'母',ko:'어머니'},
+   {jp:'子供',ko:'어린이'},{jp:'人',ko:'사람'}],
+  // Day 7 - 일상 명사
+  [{jp:'仕事',ko:'일/직업'},{jp:'お金',ko:'돈'},{jp:'電話',ko:'전화'},{jp:'電車',ko:'전철'},
+   {jp:'天気',ko:'날씨'},{jp:'食べ物',ko:'음식'},{jp:'水',ko:'물'},{jp:'時間',ko:'시간'},
+   {jp:'言葉',ko:'말/언어'},{jp:'日本語',ko:'일본어'}]
+];
+
+async function loadDailyWords() {
+  var today = new Date().toISOString().slice(0,10);
+  if (dailyLastDate === today) return; // already loaded today
+
+  var todayWords = [];
+
+  if (CFG.apiKey) {
+    // AI generates today's 10 words based on what user already knows
+    try {
+      setCUI('miss', '오늘의 단어 불러오는 중...');
+      var knownList = Object.keys(FREQ).slice(0,20).join(', ') || '없음';
+      var prompt = 'JLPT N5-N4 수준 일본어 학습자를 위한 오늘의 단어 10개를 추천해주세요.
+' +
+        '이미 아는 단어: ' + knownList + '
+' +
+        '반드시 아래 JSON 형식만 반환하세요 (다른 텍스트 없이):
+' +
+        '[{"jp":"단어","ko":"뜻","example":"예문"},...]';
+
+      var body = {
+        contents: [{role:'user', parts:[{text:prompt}]}],
+        generationConfig: {maxOutputTokens:800, temperature:0.8}
+      };
+      var res = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + CFG.model + ':generateContent?key=' + CFG.apiKey,
+        {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+      var data = await res.json();
+      var txt = data.candidates && data.candidates[0] && data.candidates[0].content &&
+                data.candidates[0].content.parts && data.candidates[0].content.parts[0].text;
+      if (txt) {
+        var clean = txt.replace(/```json|```/g,'').trim();
+        var parsed = JSON.parse(clean);
+        if (Array.isArray(parsed)) todayWords = parsed.slice(0,10);
+      }
+    } catch(e) {
+      console.log('[Daily] AI 단어 생성 실패, 내장 단어 사용:', e.message);
+    }
+  }
+
+  // Fallback to built-in words
+  if (todayWords.length === 0) {
+    var dayWords = DAILY_WORDS[dailyDayIndex % DAILY_WORDS.length];
+    todayWords = dayWords.map(function(w){ return {jp:w.jp, ko:w.ko, example:''}; });
+  }
+
+  // Register today's words
+  var newCount = 0;
+  todayWords.forEach(function(w) {
+    if (w.jp && w.ko) {
+      if (!FREQ[w.jp]) { newCount++; }
+      trackF(w.jp, w.ko);
+      addQ(w.jp, w.ko, '오늘의 단어 · ' + today);
+    }
+  });
+
+  dailyLastDate = today;
+  dailyDayIndex++;
+  saveState();
+
+  setCUI('idle', '오늘의 단어 ' + newCount + '개 추가됨');
+  showDailyBanner(todayWords);
+}
+
+function showDailyBanner(words) {
+  var area = document.getElementById('chat-area');
+  var d = document.createElement('div');
+  d.className = 'msg ai';
+  d.style.maxWidth = '100%';
+  var today = new Date().toLocaleDateString('ko-KR', {month:'long', day:'numeric'});
+  var wordHtml = words.slice(0,10).map(function(w){
+    return '<span style="display:inline-flex;gap:4px;align-items:center;background:var(--pl);border-radius:8px;padding:3px 8px;font-size:12px;margin:2px;">' +
+      '<b style="font-family:'Noto Sans JP',sans-serif;">' + w.jp + '</b>' +
+      '<span style="color:var(--muted);">' + w.ko + '</span></span>';
+  }).join('');
+  d.innerHTML = '<div style="font-size:12px;font-weight:500;color:#3C3489;margin-bottom:6px;">📅 ' + today + ' 오늘의 단어</div>' +
+    '<div style="display:flex;flex-wrap:wrap;gap:2px;">' + wordHtml + '</div>' +
+    '<div style="font-size:11px;color:var(--muted);margin-top:6px;">퀴즈 탭에서 바로 학습할 수 있어요!</div>';
+  area.appendChild(d);
+  area.scrollTop = area.scrollHeight;
+}
+
 function getQuizableItems() {
   return QP.filter(function(q){ return q.ko && q.ko.trim().length > 0; });
 }
 function renderQuiz() {
   var c=document.getElementById('quiz-content');
-  var pool=getQuizableItems();
-  if(pool.length===0){ c.innerHTML='<div class="empty"><div class="empty-icon">🎯</div>퀴즈가 아직 없어요.<br>단어장에서 추가하거나 3회 이상 대화해보세요!</div>'; return; }
+  // Use SRS: show due items first, then others
+  var due = srsGetDue();
+  var allQ = getQuizableItems();
+  if(allQ.length===0){
+    c.innerHTML='<div class="empty"><div class="empty-icon">🎯</div>퀴즈가 아직 없어요.<br>오늘의 단어를 기다리거나 단어장에서 추가해보세요!</div>';
+    return;
+  }
+  // Pool: due items first, then rest
+  var notDue = allQ.filter(function(q){
+    return !due.find(function(d){ return d.jp===q.jp; });
+  });
+  var pool = due.concat(notDue);
+
   if(qIdx>=pool.length) qIdx=0;
   qAns=false;
   var q=pool[qIdx];
+
+  // SRS info for this word
+  var srsInfo = SRS[q.jp];
+  var srsLabel = '';
+  if (srsInfo) {
+    var streak = srsInfo.correctStreak;
+    if (streak === 0) srsLabel = '새 단어';
+    else if (streak < 3) srsLabel = streak+'회 연속 정답';
+    else srsLabel = '복습 (' + srsInfo.interval + '일 간격)';
+  } else { srsLabel = '새 단어'; }
+
   var wrongPool=Object.values(FREQ)
     .filter(function(x){ return x.ko && x.ko.trim().length>0 && x.ko!==q.ko && x.jp!==q.jp; })
     .sort(function(){ return Math.random()-.5; })
@@ -972,15 +1159,24 @@ function renderQuiz() {
   if(wrongPool.length < 2) {
     qIdx++;
     if(qIdx>=pool.length) qIdx=0;
-    if(pool.length<=1){ c.innerHTML='<div class="empty"><div class="empty-icon">📖</div>단어장에 단어가 더 필요해요.<br>대화를 더 해보면 퀴즈 문제가 늘어나요!</div>'; return; }
+    if(pool.length<=1){ c.innerHTML='<div class="empty"><div class="empty-icon">📖</div>단어장에 단어가 더 필요해요!</div>'; return; }
     renderQuiz(); return;
   }
   var opts=[q.ko].concat(wrongPool).sort(function(){ return Math.random()-.5; });
   var acc=quizTotal>0?Math.round((quizCorrect/quizTotal)*100):0;
-  c.innerHTML='<div class="qscore-bar"><span class="qs-label">오늘 풀이</span><span class="qs-nums">'+quizCorrect+'/'+quizTotal+' ('+acc+'%)</span></div>'+
+  var dueCount = due.length;
+  c.innerHTML=
+    '<div class="qscore-bar">'+
+      '<span class="qs-label">오늘 풀이</span>'+
+      '<span class="qs-nums">'+quizCorrect+'/'+quizTotal+' ('+acc+'%)</span>'+
+      (dueCount>0 ? '<span style="font-size:11px;background:var(--cl);color:#712B13;padding:2px 8px;border-radius:10px;margin-left:4px;">복습 '+dueCount+'개</span>' : '')+
+    '</div>'+
     '<div style="font-size:12px;color:var(--muted);margin-bottom:.75rem;">'+(qIdx+1)+' / '+pool.length+'문제</div>'+
     '<div class="qcard">'+
-      '<div class="qqsrc">'+q.src+'</div>'+
+      '<div class="qqsrc" style="display:flex;justify-content:space-between;">'+
+        '<span>'+q.src+'</span>'+
+        '<span style="background:var(--pl);color:var(--purple);padding:1px 7px;border-radius:8px;font-size:10px;">'+srsLabel+'</span>'+
+      '</div>'+
       '<div class="qqq">'+q.jp+'</div>'+
       '<div style="font-size:11px;color:var(--muted);margin-bottom:10px;">이 표현의 한국어 뜻은?</div>'+
       '<div class="qopts">'+opts.map(function(o){
@@ -996,8 +1192,18 @@ function chkQ(btn, ch, cr, jp) {
   var correct=ch===cr;
   quizTotal++; quizHistory.push({correct:correct,ts:Date.now()});
   studyDays.add(new Date().toISOString().slice(0,10));
-  if(correct) { btn.classList.add('correct'); quizCorrect++; }
-  else {
+  // SRS update
+  srsUpdate(jp, correct);
+  if(correct) {
+    btn.classList.add('correct'); quizCorrect++;
+    var s = SRS[jp];
+    var streak = s ? s.correctStreak : 0;
+    var nextDays = s ? s.interval : 1;
+    var nqb = document.getElementById('nqb');
+    if(nqb) nqb.textContent = streak >= 3
+      ? '다음 퀴즈 → (' + nextDays + '일 후 복습)'
+      : '다음 퀴즈 →';
+  } else {
     btn.classList.add('wrong');
     document.querySelectorAll('.qo').forEach(function(b){ if(b.textContent.trim()===cr) b.classList.add('correct'); });
     var ex=wrongNotes.find(function(n){ return n.jp===jp; });
@@ -1014,6 +1220,10 @@ var chartInst=null;
 function renderStats() {
   document.getElementById('st-total').textContent=totalR;
   document.getElementById('st-words').textContent=Object.keys(FREQ).length;
+  var dueCount = srsGetDue().length;
+  var masteredCount = Object.keys(SRS).filter(function(k){ return SRS[k].correctStreak >= 3; }).length;
+  document.getElementById('st-due').textContent=dueCount;
+  document.getElementById('st-mastered').textContent=masteredCount;
   document.getElementById('st-quiz-done').textContent=quizTotal;
   document.getElementById('st-accuracy').textContent=quizTotal>0?Math.round((quizCorrect/quizTotal)*100)+'%':'-';
   var ctx=document.getElementById('quiz-chart');
@@ -1169,11 +1379,14 @@ pre.forEach(function(p){
 });
 setCUI('idle', isFirstLaunch ? '사전 캐시 '+pre.length+'개 로드' : '저장된 데이터 불러옴 ('+Object.keys(FREQ).length+'개 단어)');
 
+// Load today's daily words
+loadDailyWords();
+
 // Init welcome message (after API key check)
 if (CFG.apiKey) {
-  addMsg('ai','こんにちは！','💡 한국어: 안녕하세요! — API 키가 설정됐어요. 바로 대화를 시작할 수 있어요 🎉',null);
+  addMsg('ai','こんにちは！','💡 한국어: 안녕하세요! — 오늘의 단어가 자동으로 등록됐어요. 퀴즈 탭에서 바로 학습할 수 있어요 🎉',null);
 } else {
-  addMsg('ai','⚙ 설정이 필요해요','💡 오른쪽 상단 ⚙ 버튼을 눌러 Gemini API 키를 입력해주세요.',null);
+  addMsg('ai','⚙ 설정이 필요해요','💡 오른쪽 상단 ⚙ 버튼을 눌러 Gemini API 키를 입력해주세요. API 키 없이도 매일 10개 단어가 자동 제공돼요 📚',null);
 }
 </script>
 
@@ -1219,6 +1432,47 @@ window.addEventListener('appinstalled', function() {
   deferredPrompt = null;
   console.log('[PWA] 설치 완료');
 });
+
+// ── PWA: Push Notification (daily reminder) ──
+function requestNotificationPermission() {
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'granted') {
+    scheduleDailyReminder();
+  } else if (Notification.permission !== 'denied') {
+    Notification.requestPermission().then(function(perm) {
+      if (perm === 'granted') scheduleDailyReminder();
+    });
+  }
+}
+
+function scheduleDailyReminder() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  // Use setTimeout to fire a local notification if user hasn't studied today
+  var now = new Date();
+  var target = new Date();
+  target.setHours(20, 0, 0, 0); // 저녁 8시
+  if (target <= now) target.setDate(target.getDate() + 1);
+  var delay = target - now;
+  setTimeout(function() {
+    var today = new Date().toISOString().slice(0,10);
+    var days = JSON.parse(localStorage.getItem('jp_days') || '[]');
+    if (days.indexOf(today) === -1) {
+      // User hasn't studied today
+      if (Notification.permission === 'granted') {
+        new Notification('일본어 학습 앱 🇯🇵', {
+          body: '오늘 아직 학습을 안 했어요! 오늘의 단어 10개를 확인해보세요 📚',
+          icon: './icon-192.png',
+          badge: './icon-192.png',
+          tag: 'daily-reminder'
+        });
+      }
+    }
+    scheduleDailyReminder(); // reschedule for next day
+  }, delay);
+}
+
+// Request notification permission after 3 seconds (less intrusive)
+setTimeout(requestNotificationPermission, 3000);
 </script>
 </body>
 </html>
