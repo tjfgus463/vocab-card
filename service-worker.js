@@ -1,23 +1,23 @@
-const CACHE_NAME = 'jp-app-v6';
+const CACHE_NAME = 'jp-app-v7';
 const STATIC_ASSETS = [
   './',
   './index.html',
   './manifest.json',
   './icon-192.png',
-  './icon-512.png',
-  'https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500&family=Noto+Sans+KR:wght@400;500&display=swap',
-  'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js'
+  './icon-512.png'
 ];
 
-// Install: cache static assets
+// Install: cache only our own static files
 self.addEventListener('install', function(event) {
   event.waitUntil(
     caches.open(CACHE_NAME).then(function(cache) {
-      return cache.addAll(STATIC_ASSETS.map(function(url) {
-        return new Request(url, { mode: 'no-cors' });
-      })).catch(function(err) {
-        console.log('[SW] 일부 리소스 캐시 실패 (정상):', err);
-      });
+      return Promise.allSettled(
+        STATIC_ASSETS.map(function(url) {
+          return cache.add(url).catch(function(err) {
+            console.log('[SW] 캐시 실패 (무시):', url, err);
+          });
+        })
+      );
     }).then(function() {
       return self.skipWaiting();
     })
@@ -38,41 +38,42 @@ self.addEventListener('activate', function(event) {
   );
 });
 
-// Fetch: cache-first for static, network-first for API
+// Fetch: skip non-http requests (chrome-extension, data:, etc.)
 self.addEventListener('fetch', function(event) {
   var url = event.request.url;
 
-  // Gemini API — always go to network, never cache
+  // Skip non-http(s) requests — fixes chrome-extension error
+  if (!url.startsWith('http')) return;
+
+  // Skip Gemini API — always network
   if (url.includes('generativelanguage.googleapis.com')) {
-    event.respondWith(fetch(event.request));
+    event.respondWith(fetch(event.request).catch(function() {
+      return new Response(JSON.stringify({error:{message:'오프라인 상태입니다.'}}),
+        {status:503, headers:{'Content-Type':'application/json'}});
+    }));
     return;
   }
 
-  // Google Fonts — cache first
-  if (url.includes('fonts.googleapis.com') || url.includes('fonts.gstatic.com')) {
-    event.respondWith(
-      caches.match(event.request).then(function(cached) {
-        return cached || fetch(event.request).then(function(response) {
-          var clone = response.clone();
-          caches.open(CACHE_NAME).then(function(cache) { cache.put(event.request, clone); });
-          return response;
-        });
-      })
-    );
-    return;
-  }
+  // Skip cross-origin requests except fonts/cdn
+  var isSameOrigin = url.startsWith(self.location.origin);
+  var isCDN = url.includes('fonts.googleapis.com') ||
+              url.includes('fonts.gstatic.com') ||
+              url.includes('cdnjs.cloudflare.com');
 
-  // Static assets — cache first, fallback to network
+  if (!isSameOrigin && !isCDN) return;
+
+  // Cache-first for same-origin static assets
   event.respondWith(
     caches.match(event.request).then(function(cached) {
       if (cached) return cached;
       return fetch(event.request).then(function(response) {
-        if (!response || response.status !== 200) return response;
+        if (!response || response.status !== 200 || response.type === 'opaque') return response;
         var clone = response.clone();
-        caches.open(CACHE_NAME).then(function(cache) { cache.put(event.request, clone); });
+        caches.open(CACHE_NAME).then(function(cache) {
+          cache.put(event.request, clone);
+        });
         return response;
       }).catch(function() {
-        // 오프라인 fallback: index.html 반환
         return caches.match('./index.html');
       });
     })

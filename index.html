@@ -225,7 +225,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
       <div class="hdr-right">
         <div class="saved-box"><span class="saved-num" id="sc">0</span>API 절약</div>
         
-      <button id="install-btn" onclick="" title="홈 화면에 추가"
+      <button id="install-btn" onclick="triggerInstall()" title="홈 화면에 추가"
         style="display:none;align-items:center;gap:5px;padding:6px 12px;background:var(--purple);color:#fff;border:none;border-radius:20px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;">
         &#8615; 앱 설치
       </button>
@@ -1154,28 +1154,33 @@ if ('serviceWorker' in navigator) {
 
 // ── PWA: 설치 배너 ──
 var deferredPrompt = null;
-var installBtn = document.getElementById('install-btn');
 
 window.addEventListener('beforeinstallprompt', function(e) {
   e.preventDefault();
   deferredPrompt = e;
-  if (installBtn) {
-    installBtn.style.display = 'flex';
-    installBtn.addEventListener('click', function() {
-      installBtn.style.display = 'none';
-      deferredPrompt.prompt();
-      deferredPrompt.userChoice.then(function(choice) {
-        if (choice.outcome === 'accepted') {
-          console.log('[PWA] 설치 수락');
-        }
-        deferredPrompt = null;
-      });
-    });
-  }
+  var btn = document.getElementById('install-btn');
+  if (btn) btn.style.display = 'flex';
+  console.log('[PWA] 설치 가능 — 버튼 표시');
 });
 
+// 설치 버튼 클릭 핸들러 (onclick에서 호출)
+function triggerInstall() {
+  if (!deferredPrompt) {
+    console.log('[PWA] deferredPrompt 없음 — 이미 설치됐거나 지원 안 됨');
+    return;
+  }
+  deferredPrompt.prompt();
+  deferredPrompt.userChoice.then(function(choice) {
+    console.log('[PWA] 사용자 선택:', choice.outcome);
+    deferredPrompt = null;
+    var btn = document.getElementById('install-btn');
+    if (btn) btn.style.display = 'none';
+  });
+}
+
 window.addEventListener('appinstalled', function() {
-  if (installBtn) installBtn.style.display = 'none';
+  var btn = document.getElementById('install-btn');
+  if (btn) btn.style.display = 'none';
   deferredPrompt = null;
   console.log('[PWA] 설치 완료');
 });
