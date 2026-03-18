@@ -1397,13 +1397,13 @@ if ('serviceWorker' in navigator) {
   window.addEventListener('load', function() {
     navigator.serviceWorker.register('./service-worker.js')
       .then(function(reg) {
-        console.log('[PWA] SW 등록 성공 (v202603180711):', reg.scope);
-        // 새 SW가 설치되면 즉시 페이지 새로고침 → 최신 파일 로드
+        console.log('[PWA] SW 등록 성공:', reg.scope);
+        // 새 버전 감지 시 — 무한루프 방지: 이미 컨트롤러 있을 때만 새로고침
         reg.addEventListener('updatefound', function() {
           var newSW = reg.installing;
           newSW.addEventListener('statechange', function() {
-            if (newSW.state === 'activated') {
-              console.log('[PWA] 새 버전 활성화 — 자동 새로고침');
+            if (newSW.state === 'activated' && navigator.serviceWorker.controller) {
+              console.log('[PWA] 새 버전 감지 — 새로고침');
               window.location.reload();
             }
           });
