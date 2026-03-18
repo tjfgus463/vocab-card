@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>일본어 학습 앱</title>
+<meta name="version" content="202603180711">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#534AB7">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -1395,40 +1396,76 @@ if (CFG.apiKey) {
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', function() {
     navigator.serviceWorker.register('./service-worker.js')
-      .then(function(reg) { console.log('[PWA] SW 등록 성공:', reg.scope); })
+      .then(function(reg) {
+        console.log('[PWA] SW 등록 성공 (v202603180711):', reg.scope);
+        // 새 SW가 설치되면 즉시 페이지 새로고침 → 최신 파일 로드
+        reg.addEventListener('updatefound', function() {
+          var newSW = reg.installing;
+          newSW.addEventListener('statechange', function() {
+            if (newSW.state === 'activated') {
+              console.log('[PWA] 새 버전 활성화 — 자동 새로고침');
+              window.location.reload();
+            }
+          });
+        });
+      })
       .catch(function(err) { console.log('[PWA] SW 등록 실패:', err); });
   });
 }
 
 // ── PWA: 설치 배너 ──
 var deferredPrompt = null;
+var bannerShown = false;
 
 window.addEventListener('beforeinstallprompt', function(e) {
   e.preventDefault();
   deferredPrompt = e;
+
+  // PC: 헤더 설치 버튼 표시
   var btn = document.getElementById('install-btn');
   if (btn) btn.style.display = 'flex';
-  console.log('[PWA] 설치 가능 — 버튼 표시');
+
+  // 모바일(터치 기기): 하단 배너 표시 (1초 후, 한 번만)
+  var isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+  var dismissed = localStorage.getItem('pwa_banner_dismissed');
+  if (isTouch && !bannerShown && !dismissed) {
+    bannerShown = true;
+    setTimeout(function() {
+      var banner = document.getElementById('pwa-banner');
+      if (banner) banner.style.display = 'block';
+    }, 1500);
+  }
+  console.log('[PWA] 설치 가능 — 버튼/배너 표시');
 });
 
-// 설치 버튼 클릭 핸들러 (onclick에서 호출)
 function triggerInstall() {
-  if (!deferredPrompt) {
-    console.log('[PWA] deferredPrompt 없음 — 이미 설치됐거나 지원 안 됨');
-    return;
-  }
+  if (!deferredPrompt) return;
   deferredPrompt.prompt();
   deferredPrompt.userChoice.then(function(choice) {
     console.log('[PWA] 사용자 선택:', choice.outcome);
     deferredPrompt = null;
     var btn = document.getElementById('install-btn');
     if (btn) btn.style.display = 'none';
+    closePwaBanner();
   });
+}
+
+function triggerInstallFromBanner() {
+  closePwaBanner();
+  triggerInstall();
+}
+
+function closePwaBanner() {
+  var banner = document.getElementById('pwa-banner');
+  if (banner) banner.style.display = 'none';
+  // 오늘 하루 다시 안 보이게
+  localStorage.setItem('pwa_banner_dismissed', new Date().toISOString().slice(0,10));
 }
 
 window.addEventListener('appinstalled', function() {
   var btn = document.getElementById('install-btn');
   if (btn) btn.style.display = 'none';
+  closePwaBanner();
   deferredPrompt = null;
   console.log('[PWA] 설치 완료');
 });
@@ -1474,5 +1511,24 @@ function scheduleDailyReminder() {
 // Request notification permission after 3 seconds (less intrusive)
 setTimeout(requestNotificationPermission, 3000);
 </script>
+
+<!-- Android PWA 설치 유도 배너 -->
+<div id="pwa-banner" style="display:none;position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:520px;background:var(--surface,#fff);border-top:0.5px solid #e4e2da;padding:1rem 1.25rem 1.5rem;z-index:999;box-shadow:0 -4px 20px rgba(0,0,0,0.08);">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem;">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <img src="./icon-192.png" style="width:40px;height:40px;border-radius:10px;" onerror="this.style.display='none'"/>
+      <div>
+        <div style="font-size:14px;font-weight:500;color:#1a1a18;">일본어 학습 앱</div>
+        <div style="font-size:12px;color:#7a7870;">홈 화면에 추가하면 앱처럼 사용할 수 있어요</div>
+      </div>
+    </div>
+    <button onclick="closePwaBanner()" style="background:none;border:none;font-size:20px;color:#7a7870;cursor:pointer;padding:4px;line-height:1;">✕</button>
+  </div>
+  <div style="display:flex;gap:8px;">
+    <button onclick="closePwaBanner()" style="flex:1;padding:10px;background:#f7f6f2;border:0.5px solid #e4e2da;border-radius:10px;font-size:13px;color:#7a7870;cursor:pointer;font-family:inherit;">나중에</button>
+    <button onclick="triggerInstallFromBanner()" id="banner-install-btn" style="flex:2;padding:10px;background:#534AB7;border:none;border-radius:10px;font-size:13px;font-weight:500;color:#fff;cursor:pointer;font-family:inherit;">홈 화면에 추가</button>
+  </div>
+</div>
+
 </body>
 </html>
