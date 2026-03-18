@@ -547,9 +547,13 @@ async function translate(text) {
   apiC++; setCUI('miss', 'Gemini API 호출 중...');
 
   var sys = '당신은 일본어 회화 선생님입니다. 학습자는 한국인 초급자(JLPT N5-N4)입니다.\n' +
-    '일본어로 먼저 답하고, 아래에 "💡 " 뒤에 한국어 번역과 간단한 문법 설명을 추가하세요.\n' +
-    '형식: 일본어 문장\n💡 한국어: [번역] / 설명: [문법]\n' +
-    '반드시 위 형식을 지켜주세요. 답변이 잘리지 않도록 완전한 문장으로 작성하세요.';
+    '반드시 아래 형식을 정확히 지켜 답변하세요:\n' +
+    '일본어 답변 문장\n' +
+    '💡 한국어: [전체 번역] / 설명: [문법 포인트]\n' +
+    '📝 단어: [일본어단어1]=[한국어뜻1], [일본어단어2]=[한국어뜻2]\n' +
+    '※ 📝 단어 줄에는 이 문장의 핵심 단어 2~4개만 넣으세요. 조사·어미·접속사는 제외하고 명사·동사·형용사만 넣으세요.\n' +
+    '※ 형식 예시: 今日は学校へ行きます。\n💡 한국어: 오늘 학교에 갑니다 / 설명: へ는 방향 조사\n📝 단어: 今日=오늘, 学校=학교, 行く=가다\n' +
+    '※ 답변이 잘리지 않도록 완전한 문장으로 작성하세요.';
 
   var geminiMsgs = chatH.map(function(m) {
     return { role: m.role === 'assistant' ? 'model' : 'user', parts: [{text: m.content}] };
@@ -600,11 +604,28 @@ async function translate(text) {
   }
 
   var reply = (candidate.content && candidate.content.parts && candidate.content.parts[0] && candidate.content.parts[0].text) ? candidate.content.parts[0].text : 'すみません。';
-  var parts = reply.split('\n💡 ');
-  var result = {jp: parts[0], ko: parts[1] || '', raw: reply};
+  // Parse: jp / ko / vocab list
+  var jpPart = reply.split('\n💡 ')[0] || reply;
+  var koPart = '';
+  var vocabPairs = [];
+  var koMatch = reply.match(/💡 한국어:\s*([^\n]+)/);
+  if (koMatch) koPart = koMatch[1].trim();
+  var vocabMatch = reply.match(/📝 단어:\s*([^\n]+)/);
+  if (vocabMatch) {
+    var vocabStr = vocabMatch[1];
+    vocabStr.split(',').forEach(function(pair) {
+      var kv = pair.trim().split('=');
+      if (kv.length === 2) {
+        var jp2 = kv[0].trim();
+        var ko2 = kv[1].trim();
+        if (jp2 && ko2) vocabPairs.push({jp: jp2, ko: ko2});
+      }
+    });
+  }
+  var result = {jp: jpPart, ko: koPart, vocab: vocabPairs, raw: reply};
   L1[text] = result;
   l2s(text, result);
-  setCUI('idle', 'Gemini → 캐시 저장');
+  setCUI('idle', 'Gemini → 캐시 저장 (' + vocabPairs.length + '개 단어)');
   return Object.assign({}, result, {_l:'API'});
 }
 
@@ -784,9 +805,13 @@ async function sendChat() {
     addMsg('ai', r.jp, r.ko ? '💡 ' + r.ko : '', r._l);
     chatH.push({role:'assistant', content:r.raw||r.jp});
     var ko = r.ko ? r.ko.split('/')[0].replace('한국어: ','').trim() : '';
-    // Extract keywords from both user input and AI response - not full sentences
-    trackSentenceKeywords(text, ko);
-    trackSentenceKeywords(r.jp, '');
+    // Register AI-provided vocab pairs (most accurate - AI did the extraction)
+    if (r.vocab && r.vocab.length > 0) {
+      r.vocab.forEach(function(v) { trackF(v.jp, v.ko); });
+    } else {
+      // Fallback: keyword extraction if AI didn't provide vocab
+      trackSentenceKeywords(r.jp, '');
+    }
   } catch(e) {
     rmLd();
     addMsg('ai', 'エラーが発生しました。', '오류: ' + e.message, null);
@@ -853,8 +878,12 @@ async function analyzeTexts(sents, badgeCls, label) {
       if(ke) ke.textContent = ko||'-';
       var c = r._l !== 'API'; if(c) cached++;
       if(se) { se.textContent = c?'캐시':'번역'; se.className='sst '+(c?'sc':'sd'); }
-      // Extract keywords only - not the full sentence
-      trackSentenceKeywords(s, ko);
+      // Register vocab from AI response (accurate), fallback to extraction
+      if (r.vocab && r.vocab.length > 0) {
+        r.vocab.forEach(function(v) { trackF(v.jp, v.ko); });
+      } else {
+        trackSentenceKeywords(s, ko);
+      }
     } catch(e) {
       if(ke) ke.textContent='-';
       if(se) { se.textContent='오류'; se.className='sst sw'; }
@@ -1116,6 +1145,12 @@ function showSec(id, btn) {
 // ── Init ──
 // Load persisted state first
 loadState();
+// Clean up entries with no translation (from old regex extraction)
+Object.keys(FREQ).forEach(function(k) {
+  if (!FREQ[k].ko || FREQ[k].ko.trim() === '' || FREQ[k].ko === '-') {
+    delete FREQ[k];
+  }
+});
 var pre=[
   {jp:'おはようございます',ko:'안녕하세요 (아침)',raw:'おはようございます\n💡 한국어: 안녕하세요 (아침) / 설명: 아침 인사말'},
   {jp:'ありがとうございます',ko:'감사합니다',raw:'ありがとうございます\n💡 한국어: 감사합니다 / 설명: 공손한 감사'},
