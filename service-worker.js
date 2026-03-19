@@ -1,5 +1,5 @@
 // ── 버전 번호 — 파일 수정할 때마다 이 숫자를 올리면 캐시 자동 갱신 ──
-const CACHE_VERSION = 'jp-app-v10';
+const CACHE_VERSION = 'jp-app-v11';
 const CACHE_NAME = CACHE_VERSION;
 
 const STATIC_ASSETS = [
@@ -24,7 +24,7 @@ self.addEventListener('install', function(event) {
       );
     }).then(function() {
       console.log('[SW] 설치 완료 — skipWaiting');
-      return self.skipWaiting(); // 이전 SW 즉시 교체
+      return self.skipWaiting();
     })
   );
 });
@@ -44,19 +44,17 @@ self.addEventListener('activate', function(event) {
       );
     }).then(function() {
       console.log('[SW] 활성화 완료 — clients.claim');
-      return self.clients.claim(); // 열려있는 모든 탭에 즉시 적용
+      return self.clients.claim();
     })
   );
 });
 
-// Fetch: skip non-http requests (chrome-extension, data:, etc.)
+// Fetch
 self.addEventListener('fetch', function(event) {
   var url = event.request.url;
 
-  // Skip non-http(s) requests
   if (!url.startsWith('http')) return;
 
-  // Gemini API — 항상 네트워크 (캐시 안 함)
   if (url.includes('generativelanguage.googleapis.com')) {
     event.respondWith(
       fetch(event.request).catch(function() {
@@ -76,7 +74,7 @@ self.addEventListener('fetch', function(event) {
 
   if (!isSameOrigin && !isCDN) return;
 
-  // index.html — 항상 네트워크 우선 (최신 버전 보장)
+  // index.html — 항상 네트워크 우선
   if (url.endsWith('/') || url.endsWith('/index.html') || url.endsWith('/vocab-card/')) {
     event.respondWith(
       fetch(event.request).then(function(response) {
